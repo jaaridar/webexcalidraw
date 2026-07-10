@@ -7,31 +7,8 @@
       "config": { "distDir": "dist" }
     },
     {
-      "src": "api/save.ts",
+      "src": "api/*.ts",
       "use": "@vercel/functions"
-    },
-    {
-      "src": "api/load.ts",
-      "use": "@vercel/functions"
-    }
-  ],
-  "routes": [
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/api/save",
-      "methods": ["POST"],
-      "dest": "/api/save.ts"
-    },
-    {
-      "src": "/api/load",
-      "methods": ["GET"],
-      "dest": "/api/load.ts"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
     }
   ]
 }
