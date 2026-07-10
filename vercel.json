@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    },
+    {
+      "src": "api/save.ts",
+      "use": "@vercel/functions"
+    },
+    {
+      "src": "api/load.ts",
+      "use": "@vercel/functions"
+    }
+  ],
+  "routes": [
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/api/save",
+      "methods": ["POST"],
+      "dest": "/api/save.ts"
+    },
+    {
+      "src": "/api/load",
+      "methods": ["GET"],
+      "dest": "/api/load.ts"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}
