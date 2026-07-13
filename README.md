@@ -1,4 +1,4 @@
-# Excalidraw Clone
+# Webexcalidraw
 
 A minimal, serverless Excalidraw clone ready to deploy on Vercel.
 
