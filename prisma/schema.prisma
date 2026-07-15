@@ -1,0 +1,65 @@
+// Boardly — Collaborative Excalidraw SaaS
+// Prisma schema (SQLite)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  avatarColor  String   @default("#10b981")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedBoards    Board[]       @relation("OwnedBoards")
+  collaborations Collaborator[]
+}
+
+model Board {
+  id             String   @id @default(cuid())
+  title          String
+  description    String?
+  visibility     String   @default("PRIVATE") // PRIVATE | PUBLIC
+  accessMode     String   @default("EDIT") // READ_ONLY | EDIT
+  shareMode      String   @default("INVITE_ONLY") // PUBLIC_LINK | INVITE_ONLY
+  passwordHash   String?
+  passwordEnabled Boolean @default(false)
+  allowReshare   Boolean  @default(false)
+  allowExport    Boolean  @default(true)
+  allowDuplicate Boolean  @default(true)
+  category       String?
+  archived       Boolean  @default(false)
+  favorited      Boolean  @default(false)
+  thumbnail      String?
+  elements       String   @default("[]") // JSON of Excalidraw elements
+  appState       String?
+  ownerId        String
+  owner          User     @relation("OwnedBoards", fields: [ownerId], references: [id], onDelete: Cascade)
+  collaborators  Collaborator[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([visibility])
+}
+
+model Collaborator {
+  id        String   @id @default(cuid())
+  boardId   String
+  userId    String
+  role      String   @default("VIEWER") // EDITOR | VIEWER
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([boardId, userId])
+  @@index([boardId])
+}
