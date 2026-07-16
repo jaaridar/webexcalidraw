@@ -50,9 +50,11 @@ type Stage = "loading" | "denied" | "password" | "guest-name" | "ready";
 
 export function BoardView({
   boardId,
+  currentUser,
   onExit,
 }: {
   boardId: string;
+  currentUser: { id: string; name: string; avatarColor: string } | null;
   onExit: () => void;
 }) {
   const qc = useQueryClient();
@@ -66,9 +68,17 @@ export function BoardView({
   const [guestInput, setGuestInput] = React.useState("");
 
   const accessQuery = useQuery({
-    queryKey: ["access", boardId],
+    queryKey: ["access", boardId, currentUser?.id ?? "anon"],
     queryFn: () => boardApi.getAccess(boardId),
   });
+
+  // When the session user arrives (e.g. owner opens a board URL without a
+  // prior cookie), re-evaluate access so we don't wrongly show "denied".
+  React.useEffect(() => {
+    if (currentUser) {
+      qc.invalidateQueries({ queryKey: ["access", boardId] });
+    }
+  }, [currentUser?.id, boardId, qc]);
 
   const sceneQuery = useQuery({
     queryKey: ["scene", boardId],
@@ -79,8 +89,15 @@ export function BoardView({
   // Determine stage from access result
   React.useEffect(() => {
     if (!accessQuery.data) return;
-    const { access, currentUser } = accessQuery.data;
+    const { access, currentUser: accessUser } = accessQuery.data;
     if (access.denied) {
+      // If access is denied but we might still be provisioning a session
+      // (no user yet), stay in loading instead of wrongly showing denied.
+      if (!accessUser && !currentUser) {
+        // Wait a bit for the session to arrive before giving up.
+        const timer = setTimeout(() => setStage("denied"), 2500);
+        return () => clearTimeout(timer);
+      }
       setStage("denied");
       return;
     }
@@ -101,7 +118,7 @@ export function BoardView({
         setStage("guest-name");
       }
     }
-  }, [accessQuery.data, ensureGuest]);
+  }, [accessQuery.data, ensureGuest, currentUser]);
 
   const verifyMutation = useMutation({
     mutationFn: (password: string) => boardApi.verifyPassword(boardId, password),

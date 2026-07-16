@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import dynamic from "next/dynamic";
 
 // Render the entire app client-only. The server sends a minimal placeholder
@@ -19,5 +20,9 @@ const AppShell = dynamic(
 );
 
 export default function Home() {
-  return <AppShell />;
+  return (
+    <Suspense>
+      <AppShell />
+    </Suspense>
+  );
 }

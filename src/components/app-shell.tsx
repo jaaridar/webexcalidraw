@@ -35,17 +35,17 @@ export function AppShell() {
     queryFn: api.getSession,
   });
 
-  // Bootstrap: provision a demo owner if no session AND not viewing a shared
-  // board (shared boards may be accessed by guests with no session).
+  // Always provision a session if there isn't one — even for board views.
+  // This ensures the owner never sees "invite-only" on their own board when
+  // opening a board URL without an active session.
   React.useEffect(() => {
     if (sessionQuery.data?.user) {
       setUser(sessionQuery.data.user);
-    } else if (sessionQuery.data && !sessionQuery.data.user && !boardId) {
+    } else if (sessionQuery.data && !sessionQuery.data.user) {
       api
         .provisionSession()
         .then((r) => setUser(r.user))
         .catch(() => {
-          // If provisioning fails, retry once after a short delay
           setTimeout(() => {
             api
               .provisionSession()
@@ -54,7 +54,7 @@ export function AppShell() {
           }, 1500);
         });
     }
-  }, [sessionQuery.data, setUser, boardId]);
+  }, [sessionQuery.data, setUser]);
 
   const goDashboard = React.useCallback(() => {
     router.push("/");
@@ -67,9 +67,11 @@ export function AppShell() {
     [router]
   );
 
-  // Shared board view — works for owners, collaborators, and guests alike
+  // Shared board view — works for owners, collaborators, and guests alike.
+  // Pass the current user so the board view can re-evaluate access when the
+  // session becomes available.
   if (boardId) {
-    return <BoardView boardId={boardId} onExit={goDashboard} />;
+    return <BoardView key={boardId} boardId={boardId} currentUser={user} onExit={goDashboard} />;
   }
 
   if (sessionQuery.isLoading || !user) {
