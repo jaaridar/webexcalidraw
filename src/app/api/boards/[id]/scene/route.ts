@@ -1,9 +1,8 @@
-// Boardly — load board scene (elements) for anyone with view access
-// The owner is auto-recognized (no session needed). Guests/collaborators
-// go through the normal access control.
+// Boardly — load board scene (elements) for anyone with view access.
+// Uses the session user for access control (owner via cookie, collaborator, guest).
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getSessionUser, getOwner, getUnlockedBoards } from "@/lib/auth";
+import { getSessionUser, getUnlockedBoards } from "@/lib/auth";
 import { evaluateAccess } from "@/lib/boards";
 
 export async function GET(
@@ -11,6 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const user = await getSessionUser();
   const unlocked = await getUnlockedBoards();
 
   const board = await db.board.findUnique({
@@ -18,15 +18,6 @@ export async function GET(
     include: { collaborators: true },
   });
   if (!board) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  // Try session user first; if none, check if this is the owner's board
-  let user = await getSessionUser();
-  if (!user) {
-    const owner = await getOwner();
-    if (board.ownerId === owner.id) {
-      user = owner;
-    }
-  }
 
   const access = evaluateAccess(board, user, unlocked);
 

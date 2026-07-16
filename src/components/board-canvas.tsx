@@ -1,13 +1,15 @@
 "use client";
 
-// Boardly — Excalidraw canvas with real-time collaboration via socket.io
+// Boardly — BoardCanvas: Excalidraw + real-time collaboration.
+// Theme follows the app theme (no separate Excalidraw theme toggle).
 import * as React from "react";
-import { io, type Socket } from "socket.io-client";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types/types";
 import "@excalidraw/excalidraw/index.css";
+import { useTheme } from "next-themes";
 import { elementsToSvg, svgToDataUrl } from "@/lib/excalidraw-to-svg";
 import { api } from "@/lib/api";
+import { useCollab, broadcastAccessChange } from "@/hooks/use-collab";
 import type { PresenceUser } from "@/lib/types";
 
 type Identity = { id: string; name: string; avatarColor: string };
@@ -34,7 +36,7 @@ export function BoardCanvas({
   onSaved?: () => void;
 }) {
   const [apiRef, setApiRef] = React.useState<ExcalidrawImperativeAPI | null>(null);
-  const socketRef = React.useRef<Socket | null>(null);
+  const { resolvedTheme } = useTheme();
   const applyingRemote = React.useRef(false);
   const lastSig = React.useRef("");
   const saveTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -50,22 +52,12 @@ export function BoardCanvas({
     }
   }, [initialElements, initialAppState]);
 
-  // socket lifecycle
-  React.useEffect(() => {
-    const socket = io("/?XTransformPort=3003", {
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: 8,
-      reconnectionDelay: 1000,
-    });
-    socketRef.current = socket;
+  const socketRef = useCollab(boardId, identity, role, onPresence);
 
-    socket.on("connect", () => socket.emit("board:join", { boardId, user: identity, role }));
-    socket.on("presence:update", (d: { boardId: string; users: PresenceUser[] }) =>
-      d.boardId === boardId && onPresence(d.users));
-    socket.on("scene:request", (d: { boardId: string; fromSocketId: string }) => {
-      if (d.boardId === boardId && apiRef) socket.emit("scene:response", { boardId, targetSocketId: d.fromSocketId, elements: apiRef.getSceneElements() });
-    });
+  // scene:request / scene:hydrate / scene:update listeners
+  React.useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
     const apply = (d: { boardId: string; elements: any[] }) => {
       if (d.boardId !== boardId || !apiRef) return;
       applyingRemote.current = true;
@@ -73,15 +65,18 @@ export function BoardCanvas({
       lastSig.current = JSON.stringify(d.elements);
       setTimeout(() => (applyingRemote.current = false), 80);
     };
+    const onReq = (d: { boardId: string; fromSocketId: string }) => {
+      if (d.boardId === boardId && apiRef) socket.emit("scene:response", { boardId, targetSocketId: d.fromSocketId, elements: apiRef.getSceneElements() });
+    };
+    socket.on("scene:request", onReq);
     socket.on("scene:hydrate", apply);
     socket.on("scene:update", apply);
-
     return () => {
-      socket.emit("board:leave", { boardId, user: identity });
-      socket.disconnect();
-      socketRef.current = null;
+      socket.off("scene:request", onReq);
+      socket.off("scene:hydrate", apply);
+      socket.off("scene:update", apply);
     };
-  }, [boardId, identity.id, identity.name, identity.avatarColor, role, apiRef, onPresence]);
+  }, [socketRef, apiRef, boardId]);
 
   const onChange = React.useCallback((elements: any) => {
     if (!canEdit || applyingRemote.current) return;
@@ -99,15 +94,20 @@ export function BoardCanvas({
       api.saveScene(boardId, { elements: elsJson, thumbnail: svgToDataUrl(elementsToSvg(elsJson, { bg: "#fafaf9" })) })
         .then(() => onSaved?.()).catch(() => {});
     }, 1200);
-  }, [boardId, canEdit, onSaved]);
+  }, [boardId, canEdit, onSaved, socketRef]);
 
   const onPointerUpdate = React.useCallback((payload: any) => {
     if (socketRef.current && payload?.pointer)
       socketRef.current.emit("cursor:move", { boardId, cursor: { x: payload.pointer.x, y: payload.pointer.y }, user: identity });
-  }, [boardId, identity]);
+  }, [boardId, identity, socketRef]);
+
+  // Expose broadcast for the parent to trigger on permission changes
+  React.useEffect(() => {
+    (window as any).__boardlyBroadcastAccess = (am: string, v: string) => broadcastAccessChange(socketRef, boardId, am, v);
+  }, [boardId, socketRef]);
 
   return (
-    <div className="excalidraw-wrapper h-full w-full">
+    <div className="excalidraw-wrapper h-full w-full" data-theme={resolvedTheme}>
       <Excalidraw
         excalidrawAPI={setApiRef}
         initialData={initialData}
@@ -117,13 +117,14 @@ export function BoardCanvas({
         zenModeEnabled={false}
         gridModeEnabled={false}
         lang="en"
+        theme={resolvedTheme === "dark" ? "dark" : "light"}
         UIOptions={{
           canvasActions: {
             export: { saveFileToDisk: allowExport },
             saveToActiveFile: false,
             loadScene: canEdit,
             clearCanvas: canEdit,
-            toggleTheme: true,
+            toggleTheme: false, // single theme — no Excalidraw toggle
           },
           tools: { image: canEdit },
         }}

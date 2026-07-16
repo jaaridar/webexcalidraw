@@ -119,3 +119,28 @@ Verification (Agent Browser):
 
 Stage Summary:
 - Complete rebuild delivered: board-first, modular, premium. ~12 focused component files, centralized types/hooks/store. Any developer can navigate it easily.
+
+---
+Task ID: 15
+Agent: Orchestrator
+Task: Simplify permissions, instant access sync, collaborator visibility, single dark mode, sidebar redesign
+
+Work Log:
+- Simplified permission model: removed "invite-only" (shareMode). Public boards accessible to anyone with link; private = owner + collaborators only. Just 4 choices: Private/Public + Edit/Read-only. Updated boards.ts evaluateAccess() accordingly.
+- Added instant access sync:
+  * Collab service: new `access:change` (client→server) / `access:changed` (server→client) events that broadcast to the board room.
+  * use-collab.ts hook: listens for `access:changed`, invalidates access+scene React Query caches → UI refetches → Excalidraw switches view/edit mode instantly.
+  * Control Center: owner changing Edit↔Read-only calls `__boardlyBroadcastAccess` (exposed by board-canvas) → emits to socket → all collaborators update live. Marked with "⚡ Changes apply instantly to everyone" hint.
+- Collaborator visibility: TopBar shows live presence avatars (always visible) with a dropdown listing each collaborator's name, online status, and role. Control Center lists all collaborators by name + email + role badge.
+- Single dark mode: BoardCanvas uses `useTheme()` and passes `theme={resolvedTheme === "dark" ? "dark" : "light"}` to Excalidraw. Excalidraw's own theme toggle disabled (`toggleTheme: false`). One theme toggle controls both.
+- Redesigned sidebar for unlimited boards: Sections (Favorites · Recent · All boards grouped by category) with "Show all N boards" toggle. Collapsed mode = thumbnail-only rail. Footer board count. Handles unlimited boards gracefully.
+
+Verification:
+- Control Center sections: "Board details | Visibility | Access level | Share link | Password protection | Collaborators (0)" — "Sharing method" removed ✓, instant hint present ✓
+- Single dark mode: app toggle → Excalidraw follows (data-theme="dark", theme--dark class), no Excalidraw theme toggle ✓
+- Sidebar: Favorites/Recent/All boards sections, board count footer ✓
+- Presence: "2 live" with avatar stack on both sessions ✓
+- 0 errors, 0 hydration, 0 401s
+
+Stage Summary:
+- Permissions simplified (no invite-only), instant access sync wired end-to-end, collaborators visible by name, single dark mode, sidebar handles unlimited boards with sections.

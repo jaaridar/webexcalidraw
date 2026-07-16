@@ -1,16 +1,13 @@
 "use client";
 
-// Boardly — TopBar: the board's control surface. All board-level features
-// live here (visibility, favorite, presence, share, control center, profile).
-// This is the "features on top" surface — minimal until you engage it.
+// Boardly — TopBar: board control surface (features on top).
+// Shows collaborators, presence, access mode (live), share & control.
 import * as React from "react";
-import { motion } from "framer-motion";
 import {
-  LogOut, Moon, Share2, Shield, Star, Sun, UserCog,
+  ArrowLeft, Check, Copy, Eye, Globe, LogOut, Moon, Pencil, Share2, Shield, Star, Sun, UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar } from "@/components/common";
-import { AvatarStack, MiniBadges, VisibilityPill } from "@/components/common";
+import { Avatar, AvatarStack, MiniBadges, VisibilityPill } from "@/components/common";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -40,39 +37,31 @@ export function TopBar({
   return (
     <>
       <header className="z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border/60 glass px-3">
-        {/* Board identity + context pills (revealed compactly) */}
+        {/* Board identity + context pills */}
+        <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={onExit} aria-label="Back">
+          <ArrowLeft className="size-4" />
+        </Button>
         <div className="flex min-w-0 items-center gap-2">
           <h1 className="truncate text-sm font-semibold sm:text-base">{board.title}</h1>
           <VisibilityPill visibility={board.visibility} className="hidden sm:inline-flex" />
           <MiniBadges passwordEnabled={board.passwordEnabled} collaborators={board.collaboratorCount} className="hidden md:flex" />
         </div>
 
-        {/* Favorite — subtle toggle */}
+        {/* Favorite */}
         <Button variant="ghost" size="icon" className={cn("size-8", board.favorited && "text-amber-500")}
           onClick={onToggleFavorite} aria-label="Favorite">
           <Star className={cn("size-4", board.favorited && "fill-current")} />
         </Button>
 
         <div className="ml-auto flex items-center gap-1.5">
-          {/* Live presence */}
-          {presence.length > 0 && (
-            <div className="hidden items-center gap-2 sm:flex">
-              <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                <span className="relative flex size-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-                </span>
-                {presence.length} live
-              </span>
-              <AvatarStack users={presence} max={4} size={26} />
-            </div>
-          )}
+          {/* Live collaborators — always visible when present */}
+          <CollaboratorIndicator presence={presence} collaboratorCount={board.collaboratorCount} onOpenControl={isOwner ? onOpenControl : undefined} />
 
           {/* Role indicator for non-owners */}
           {!isOwner && (
             <span className={cn("hidden rounded-md px-2 py-0.5 text-[11px] font-medium sm:inline-flex",
               access.canEdit ? "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300" : "bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300")}>
-              {access.canEdit ? "Editor" : "Viewer"}
+              {access.canEdit ? <><Pencil className="size-3" /> Editor</> : <><Eye className="size-3" /> Viewer</>}
             </span>
           )}
 
@@ -95,6 +84,57 @@ export function TopBar({
 
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} url={shareUrl} board={board} isOwner={isOwner} onOpenControl={onOpenControl} />
     </>
+  );
+}
+
+// Live collaborator indicator — shows presence avatars + names on hover
+function CollaboratorIndicator({ presence, collaboratorCount, onOpenControl }: {
+  presence: PresenceUser[]; collaboratorCount: number; onOpenControl?: () => void;
+}) {
+  if (presence.length === 0 && collaboratorCount === 0) return null;
+  const users = presence.length > 0 ? presence : [];
+  return (
+    <div className="hidden items-center gap-2 sm:flex">
+      {presence.length > 0 && (
+        <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+          </span>
+          {presence.length} live
+        </span>
+      )}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="rounded-full p-0.5 transition-colors hover:bg-accent" aria-label="Collaborators">
+            <AvatarStack users={users} max={4} size={26} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel>Collaborators {presence.length > 0 && `· ${presence.length} live`}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {users.length === 0 ? (
+            <div className="px-2 py-3 text-center text-xs text-muted-foreground">No one online right now</div>
+          ) : (
+            users.map((u) => (
+              <div key={u.id} className="flex items-center gap-2.5 px-2 py-1.5">
+                <Avatar name={u.name} color={u.avatarColor} size={26} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{u.name}</p>
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400">● online · {u.role}</p>
+                </div>
+              </div>
+            ))
+          )}
+          {onOpenControl && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onOpenControl}><Shield className="size-4" /> Manage access</DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 
@@ -128,7 +168,7 @@ function ProfileMenu({ user, onExit }: { user: User | null; onExit: () => void }
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setEditOpen(true)}><UserCog className="size-4" /> Edit profile</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={() => { onExit(); }}><LogOut className="size-4" /> Exit to dashboard</DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={onExit}><LogOut className="size-4" /> Back to dashboard</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <ProfileEditDialog open={editOpen} onOpenChange={setEditOpen} user={user} />
@@ -150,7 +190,7 @@ function ProfileEditDialog({ open, onOpenChange, user }: {
     try {
       const r = await update.mutateAsync({ name, email, avatarColor: color });
       setUser(r.user); toast.success("Profile updated"); onOpenChange(false);
-    } catch (e) { toast.error("Could not update profile"); }
+    } catch { toast.error("Could not update profile"); }
   };
 
   return (
@@ -192,14 +232,12 @@ function ShareDialog({ open, onOpenChange, url, board, isOwner, onOpenControl }:
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Input readOnly value={url} className="font-mono text-xs" />
-            <Button size="icon" variant="outline" onClick={copy} aria-label="Copy">{copied ? <span className="text-emerald-600 text-xs">✓</span> : <Share2 className="size-4" />}</Button>
+            <Button size="icon" variant="outline" onClick={copy} aria-label="Copy">{copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}</Button>
           </div>
           <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
             {board.visibility === "PRIVATE"
               ? "This board is private. Make it public from the Control Center to share a link."
-              : board.shareMode === "PUBLIC_LINK"
-                ? `Anyone with the link can ${board.accessMode === "EDIT" ? "edit" : "view"} this board${board.passwordEnabled ? " (password required)." : "."}`
-                : "Only invited collaborators can access this board."}
+              : `Anyone with the link can ${board.accessMode === "EDIT" ? "edit" : "view"} this board${board.passwordEnabled ? " (password required)." : "."}`}
           </div>
           {isOwner && (
             <Button variant="outline" className="w-full" onClick={() => { onOpenChange(false); onOpenControl(); }}>

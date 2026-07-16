@@ -230,6 +230,21 @@ io.on('connection', (socket) => {
     },
   )
 
+  // ---- access:change ---- (owner broadcasts a permission change to everyone
+  // in the room so collaborators update their Edit/Read-only state instantly)
+  socket.on(
+    'access:change',
+    (payload: { boardId: string; accessMode: string; visibility: string }) => {
+      const { boardId, accessMode, visibility } = payload
+      if (!boardId) return
+      io.to(roomName(boardId)).emit('access:changed', {
+        boardId,
+        accessMode,
+        visibility,
+      })
+    },
+  )
+
   // ---- disconnect ----
   socket.on('disconnect', (reason) => {
     console.log(`[collab] socket disconnected: ${socket.id} reason=${reason}`)

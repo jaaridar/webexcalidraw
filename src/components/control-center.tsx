@@ -1,7 +1,8 @@
 "use client";
 
-// Boardly — Control Center: the single place to manage a board's permissions,
-// sharing, security and collaborators. Right-side sheet.
+// Boardly — Control Center: simplified permissions panel.
+// Private/Public + Edit/Read-only. Collaborators listed by name.
+// Changes broadcast instantly to everyone on the board.
 import * as React from "react";
 import {
   Check, Copy, Eye, Globe, KeyRound, Link2, Lock, Mail, MoreVertical, Pencil,
@@ -20,7 +21,9 @@ import { Avatar } from "@/components/common";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useBoard, useInviteCollaborator, useRemoveCollaborator, useUpdateBoard, useUpdateCollaborator } from "@/hooks/use-data";
+import {
+  useBoard, useInviteCollaborator, useRemoveCollaborator, useUpdateBoard, useUpdateCollaborator,
+} from "@/hooks/use-data";
 import { ROLE } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -54,7 +57,19 @@ export function ControlCenter({ boardId, open, onOpenChange }: {
     try { await navigator.clipboard.writeText(shareUrl); setCopied(true); toast.success("Link copied"); setTimeout(() => setCopied(false), 1800); }
     catch { toast.error("Could not copy"); }
   };
-  const set = (body: Record<string, unknown>, msg: string) => { update.mutate(body); toast.success(msg); };
+
+  // Apply a change AND broadcast it instantly to everyone on the board
+  const apply = (body: Record<string, unknown>, msg: string) => {
+    update.mutate(body);
+    toast.success(msg);
+    // Broadcast access/visibility changes for instant collaborator sync
+    if ("accessMode" in body || "visibility" in body) {
+      (window as any).__boardlyBroadcastAccess?.(
+        body.accessMode ?? board.accessMode,
+        body.visibility ?? board.visibility
+      );
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -64,20 +79,42 @@ export function ControlCenter({ boardId, open, onOpenChange }: {
           <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Shield className="size-4" /></div>
           <div className="min-w-0 flex-1">
             <SheetTitle className="truncate text-base">Control Center</SheetTitle>
-            <p className="text-xs text-muted-foreground">Access, security & sharing</p>
+            <p className="text-xs text-muted-foreground">Access & collaborators</p>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-thin">
+          {/* Board details */}
           <Section icon={<Pencil className="size-4" />} title="Board details">
             <Field label="Title"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
             <Field label="Description"><Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} /></Field>
             <Button size="sm" className="w-fit" disabled={update.isPending}
-              onClick={() => set({ title: title.trim() || "Untitled", description }, "Details saved")}>
+              onClick={() => apply({ title: title.trim() || "Untitled", description }, "Details saved")}>
               <Save className="size-3.5" /> Save
             </Button>
           </Section>
 
+          {/* Visibility — simplified: Private or Public */}
+          <Section icon={<Globe className="size-4" />} title="Visibility">
+            <div className="grid grid-cols-2 gap-2">
+              <Choice active={board.visibility === "PRIVATE"} onClick={() => apply({ visibility: "PRIVATE" }, "Set to private")}
+                icon={<Lock className="size-4" />} title="Private" desc="Only you & collaborators" />
+              <Choice active={board.visibility === "PUBLIC"} onClick={() => apply({ visibility: "PUBLIC" }, "Set to public")}
+                icon={<Globe className="size-4" />} title="Public" desc="Anyone with the link" />
+            </div>
+          </Section>
+
+          {/* Access level — Edit / Read-only (broadcasts instantly) */}
+          <Section icon={<Pencil className="size-4" />} title="Access level" hint="Changes apply instantly to everyone">
+            <div className="grid grid-cols-2 gap-2">
+              <Choice active={board.accessMode === "EDIT"} onClick={() => apply({ accessMode: "EDIT" }, "Set to editable — collaborators can edit now")}
+                icon={<Pencil className="size-4" />} title="Can edit" desc="Collaborators can draw" />
+              <Choice active={board.accessMode === "READ_ONLY"} onClick={() => apply({ accessMode: "READ_ONLY" }, "Set to read-only — collaborators can only view now")}
+                icon={<Eye className="size-4" />} title="Read-only" desc="Collaborators view only" />
+            </div>
+          </Section>
+
+          {/* Share link (only for public boards) */}
           {board.visibility === "PUBLIC" && (
             <Section icon={<Link2 className="size-4" />} title="Share link">
               <div className="flex items-center gap-2">
@@ -87,61 +124,34 @@ export function ControlCenter({ boardId, open, onOpenChange }: {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                {board.shareMode === "PUBLIC_LINK" ? "Anyone with this link can access the board." : "Only invited collaborators can access this board."}
+                Anyone with this link can {board.accessMode === "EDIT" ? "edit" : "view"} this board.
                 {board.passwordEnabled && " A password is required."}
               </p>
             </Section>
           )}
 
-          <Section icon={<Globe className="size-4" />} title="Visibility">
-            <div className="grid grid-cols-2 gap-2">
-              <Choice active={board.visibility === "PRIVATE"} onClick={() => set({ visibility: "PRIVATE" }, "Set to private")}
-                icon={<Lock className="size-4" />} title="Private" desc="Only you" />
-              <Choice active={board.visibility === "PUBLIC"} onClick={() => set({ visibility: "PUBLIC" }, "Set to public")}
-                icon={<Globe className="size-4" />} title="Public" desc="Shareable" />
-            </div>
+          {/* Password protection */}
+          <Section icon={<KeyRound className="size-4" />} title="Password protection">
+            <Toggle
+              checked={board.passwordEnabled}
+              onChange={(v) => apply({ passwordEnabled: v }, v ? "Password enabled" : "Password disabled")}
+              icon={board.passwordEnabled ? <Lock className="size-4 text-amber-600" /> : <Unlock className="size-4 text-muted-foreground" />}
+              title={board.passwordEnabled ? "Protected" : "Not protected"} desc="Require a password to open the link"
+            />
+            {board.passwordEnabled && (
+              <div className="flex items-center gap-2">
+                <Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="New password" />
+                <Button size="sm" variant="outline" disabled={!newPw || update.isPending}
+                  onClick={() => { apply({ password: newPw }, "Password updated"); setNewPw(""); }}>Update</Button>
+              </div>
+            )}
           </Section>
 
-          {board.visibility === "PUBLIC" && (<>
-            <Section icon={<Pencil className="size-4" />} title="Access level">
-              <div className="grid grid-cols-2 gap-2">
-                <Choice active={board.accessMode === "EDIT"} onClick={() => set({ accessMode: "EDIT" }, "Set to editable")}
-                  icon={<Pencil className="size-4" />} title="Can edit" desc="Draw & edit" />
-                <Choice active={board.accessMode === "READ_ONLY"} onClick={() => set({ accessMode: "READ_ONLY" }, "Set to read-only")}
-                  icon={<Eye className="size-4" />} title="Read-only" desc="View only" />
-              </div>
-            </Section>
-
-            <Section icon={<Link2 className="size-4" />} title="Sharing method">
-              <div className="grid grid-cols-2 gap-2">
-                <Choice active={board.shareMode === "PUBLIC_LINK"} onClick={() => set({ shareMode: "PUBLIC_LINK" }, "Anyone with link")}
-                  icon={<Link2 className="size-4" />} title="Anyone with link" desc="No login" />
-                <Choice active={board.shareMode === "INVITE_ONLY"} onClick={() => set({ shareMode: "INVITE_ONLY" }, "Invite only")}
-                  icon={<Mail className="size-4" />} title="Invite only" desc="Emails only" />
-              </div>
-            </Section>
-
-            <Section icon={<KeyRound className="size-4" />} title="Password protection">
-              <Toggle
-                checked={board.passwordEnabled}
-                onChange={(v) => set({ passwordEnabled: v }, v ? "Password enabled" : "Password disabled")}
-                icon={board.passwordEnabled ? <Lock className="size-4 text-amber-600" /> : <Unlock className="size-4 text-muted-foreground" />}
-                title={board.passwordEnabled ? "Protected" : "Not protected"} desc="Require a password to open the link"
-              />
-              {board.passwordEnabled && (
-                <div className="flex items-center gap-2">
-                  <Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="New password" />
-                  <Button size="sm" variant="outline" disabled={!newPw || update.isPending}
-                    onClick={() => { set({ password: newPw }, "Password updated"); setNewPw(""); }}>Update</Button>
-                </div>
-              )}
-            </Section>
-          </>)}
-
+          {/* Collaborators — shows names + roles */}
           <Section icon={<Users className="size-4" />} title={`Collaborators (${board.collaborators.length})`}>
             {board.owner && (
               <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 p-2.5">
-                <Avatar name={board.owner.name} color={board.owner.avatarColor} size={30} />
+                <Avatar name={board.owner.name} color={board.owner.avatarColor} size={32} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{board.owner.name} <span className="text-muted-foreground">(you)</span></p>
                   <p className="truncate text-xs text-muted-foreground">{board.owner.email}</p>
@@ -149,12 +159,18 @@ export function ControlCenter({ boardId, open, onOpenChange }: {
                 <Badge className="bg-primary/10 text-primary hover:bg-primary/15">Owner</Badge>
               </div>
             )}
-            {board.collaborators.map((c) => (
-              <CollabRow key={c.userId} c={c}
-                onRole={(r) => { updateCollab.mutate({ userId: c.userId, role: r }); toast.success("Role updated"); }}
-                onRemove={() => { removeCollab.mutate(c.userId); toast.success("Access revoked"); }}
-                pending={updateCollab.isPending || removeCollab.isPending} />
-            ))}
+            {board.collaborators.length === 0 && !board.owner ? null : board.collaborators.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+                No collaborators yet. Invite someone below.
+              </p>
+            ) : (
+              board.collaborators.map((c) => (
+                <CollabRow key={c.userId} c={c}
+                  onRole={(r) => { updateCollab.mutate({ userId: c.userId, role: r }); toast.success("Role updated"); }}
+                  onRemove={() => { removeCollab.mutate(c.userId); toast.success("Access revoked"); }}
+                  pending={updateCollab.isPending || removeCollab.isPending} />
+              ))
+            )}
             <div className="rounded-lg border border-dashed border-border p-2.5">
               <p className="mb-2 text-xs font-medium text-muted-foreground">Invite by email</p>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -168,12 +184,6 @@ export function ControlCenter({ boardId, open, onOpenChange }: {
               </div>
             </div>
           </Section>
-
-          <Section icon={<Shield className="size-4" />} title="Restrictions">
-            <Toggle checked={board.allowReshare} onChange={(v) => set({ allowReshare: v }, "Updated")} title="Allow resharing" desc="Let collaborators share with others" />
-            <Toggle checked={board.allowExport} onChange={(v) => set({ allowExport: v }, "Updated")} title="Allow export" desc="Export as PNG/SVG/JSON" />
-            <Toggle checked={board.allowDuplicate} onChange={(v) => set({ allowDuplicate: v }, "Updated")} title="Allow duplication" desc="Let others copy this board" />
-          </Section>
           <div className="h-6" />
         </div>
       </SheetContent>
@@ -181,13 +191,16 @@ export function ControlCenter({ boardId, open, onOpenChange }: {
   );
 }
 
-// --- small building blocks (kept in-file for cohesion) ---
-function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+// --- building blocks ---
+function Section({ icon, title, hint, children }: {
+  icon: React.ReactNode; title: string; hint?: string; children: React.ReactNode;
+}) {
   return (
     <section className="border-b border-border/60 px-5 py-4">
       <div className="mb-2.5 flex items-center gap-2">
         <span className="text-muted-foreground">{icon}</span>
         <h3 className="text-sm font-semibold">{title}</h3>
+        {hint && <span className="ml-auto text-[10px] font-medium text-emerald-600 dark:text-emerald-400">⚡ {hint}</span>}
       </div>
       <div className="space-y-2.5">{children}</div>
     </section>
@@ -236,7 +249,7 @@ function CollabRow({ c, onRole, onRemove, pending }: {
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-2.5">
-      <Avatar name={c.user.name} color={c.user.avatarColor} size={30} />
+      <Avatar name={c.user.name} color={c.user.avatarColor} size={32} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{c.user.name}</p>
         <p className="truncate text-xs text-muted-foreground">{c.user.email}</p>
