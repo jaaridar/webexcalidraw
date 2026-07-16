@@ -35,6 +35,7 @@ model Board {
   allowExport    Boolean  @default(true)
   allowDuplicate Boolean  @default(true)
   category       String?
+  workspace      String?  // workspace name for grouping
   archived       Boolean  @default(false)
   favorited      Boolean  @default(false)
   thumbnail      String?
@@ -49,6 +50,7 @@ model Board {
 
   @@index([ownerId])
   @@index([visibility])
+  @@index([workspace])
 }
 
 model Collaborator {

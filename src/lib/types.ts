@@ -20,6 +20,7 @@ export type BoardSummary = {
   allowExport: boolean;
   allowDuplicate: boolean;
   category: string | null;
+  workspace: string | null;
   archived: boolean;
   favorited: boolean;
   thumbnail: string | null;

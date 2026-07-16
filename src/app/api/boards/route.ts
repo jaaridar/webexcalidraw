@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOwner } from "@/lib/auth";
 import { serializeBoardCard } from "@/lib/boards";
+import { elementsToSvg, svgToDataUrl } from "@/lib/excalidraw-to-svg";
 import {
   ACCESS_MODE,
   SHARE_MODE,
@@ -34,7 +35,10 @@ export async function POST(req: Request) {
   const accessMode = (body.accessMode as AccessMode) || ACCESS_MODE.EDIT;
   const shareMode = (body.shareMode as ShareMode) || SHARE_MODE.INVITE_ONLY;
   const category = (body.category as BoardCategory | null) || null;
+  const workspace = (body.workspace as string | null) || null;
   const elements = (body.elements as string | undefined) || "[]";
+
+  const thumbnail = svgToDataUrl(elementsToSvg(elements, { bg: "#fafaf9" }));
 
   const board = await db.board.create({
     data: {
@@ -44,7 +48,9 @@ export async function POST(req: Request) {
       accessMode,
       shareMode,
       category,
+      workspace,
       elements,
+      thumbnail,
       ownerId: owner.id,
     },
   });

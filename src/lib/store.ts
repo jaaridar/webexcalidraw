@@ -15,6 +15,9 @@ type AppState = {
   // sidebar
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
+  // workspace filter
+  selectedWorkspace: string | null;
+  setSelectedWorkspace: (ws: string | null) => void;
   // guest identity (for shared-board presence)
   guest: Guest;
   setGuestName: (name: string) => void;
@@ -39,13 +42,15 @@ export const useApp = create<AppState>()(
       sidebarCollapsed: false,
       toggleSidebar: () =>
         set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      selectedWorkspace: null,
+      setSelectedWorkspace: (selectedWorkspace) => set({ selectedWorkspace }),
       guest: makeGuest(),
       setGuestName: (name) =>
         set((s) => ({ guest: { ...s.guest, name: name.trim() || "Guest" } })),
     }),
     {
       name: "boardly",
-      partialize: (s) => ({ guest: s.guest, sidebarCollapsed: s.sidebarCollapsed }),
+      partialize: (s) => ({ guest: s.guest, sidebarCollapsed: s.sidebarCollapsed, selectedWorkspace: s.selectedWorkspace }),
     }
   )
 );

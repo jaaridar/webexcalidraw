@@ -44,7 +44,15 @@ export function BoardCanvas({
 
   const initialData = React.useMemo(() => {
     try {
-      const elements = JSON.parse(initialElements || "[]");
+      let elements: any[];
+      if (Array.isArray(initialElements)) {
+        elements = initialElements;
+      } else if (typeof initialElements === "string") {
+        const parsed = JSON.parse(initialElements || "[]");
+        elements = Array.isArray(parsed) ? parsed : [];
+      } else {
+        elements = [];
+      }
       const appState = initialAppState ? JSON.parse(initialAppState) : undefined;
       return { elements, appState: { ...(appState ?? {}), collaborators: [] }, scrollToContent: true } as never;
     } catch {
@@ -61,8 +69,9 @@ export function BoardCanvas({
     const apply = (d: { boardId: string; elements: any[] }) => {
       if (d.boardId !== boardId || !apiRef) return;
       applyingRemote.current = true;
-      apiRef.updateScene({ elements: d.elements });
-      lastSig.current = JSON.stringify(d.elements);
+      const elements = Array.isArray(d.elements) ? d.elements : [];
+      apiRef.updateScene({ elements });
+      lastSig.current = JSON.stringify(elements);
       setTimeout(() => (applyingRemote.current = false), 80);
     };
     const onReq = (d: { boardId: string; fromSocketId: string }) => {

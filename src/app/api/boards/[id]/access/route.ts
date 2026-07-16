@@ -1,9 +1,10 @@
 // Boardly — shared board access info.
 // GET: returns access for the current user (owner via cookie, collaborator, or guest).
-//     Does NOT auto-provision — guests see guest access.
+//     Owner is recognized even without a session cookie.
 // POST: verify password for a public-link board.
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getOwner } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { getSessionUser, getUnlockedBoards, unlockBoard } from "@/lib/auth";
 import { evaluateAccess, getCollaboratorRole } from "@/lib/boards";
@@ -24,7 +25,9 @@ export async function GET(
 
   if (!board) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const access = evaluateAccess(board, user, unlocked);
+  const owner = await getOwner();
+  const effectiveUser = (user && board.ownerId === user.id) ? user : (board.ownerId === owner.id ? owner : user);
+  const access = evaluateAccess(board, effectiveUser, unlocked);
 
   return NextResponse.json({
     board: {
@@ -46,8 +49,8 @@ export async function GET(
       updatedAt: board.updatedAt,
     },
     access,
-    currentUser: user,
-    role: getCollaboratorRole(board, user),
+    currentUser: effectiveUser,
+    role: getCollaboratorRole(board, effectiveUser),
   });
 }
 
@@ -62,7 +65,8 @@ export async function POST(
   if (!board) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Owner bypasses password
-  if (user && board.ownerId === user.id) {
+  const owner = await getOwner();
+  if ((user && board.ownerId === user.id) || board.ownerId === owner.id) {
     return NextResponse.json({ ok: true });
   }
 

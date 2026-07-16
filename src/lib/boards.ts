@@ -102,6 +102,7 @@ export function serializeBoard(
     allowExport: board.allowExport,
     allowDuplicate: board.allowDuplicate,
     category: board.category,
+    workspace: board.workspace,
     archived: board.archived,
     favorited: board.favorited,
     thumbnail: board.thumbnail,
@@ -125,7 +126,7 @@ export function serializeBoardCard(board: {
   id: string; title: string; description: string | null;
   visibility: string; accessMode: string; shareMode: string;
   passwordEnabled: boolean; allowReshare: boolean; allowExport: boolean; allowDuplicate: boolean;
-  category: string | null; archived: boolean; favorited: boolean; thumbnail: string | null;
+  category: string | null; workspace: string | null; archived: boolean; favorited: boolean; thumbnail: string | null;
   ownerId: string; createdAt: Date; updatedAt: Date;
   _count?: { collaborators: number };
 }) {
@@ -134,7 +135,7 @@ export function serializeBoardCard(board: {
     visibility: board.visibility, accessMode: board.accessMode, shareMode: board.shareMode,
     passwordEnabled: board.passwordEnabled, allowReshare: board.allowReshare,
     allowExport: board.allowExport, allowDuplicate: board.allowDuplicate,
-    category: board.category, archived: board.archived, favorited: board.favorited,
+    category: board.category, workspace: board.workspace, archived: board.archived, favorited: board.favorited,
     thumbnail: board.thumbnail, ownerId: board.ownerId,
     collaboratorCount: board._count?.collaborators ?? 0,
     createdAt: board.createdAt, updatedAt: board.updatedAt,

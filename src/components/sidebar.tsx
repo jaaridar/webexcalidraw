@@ -1,20 +1,22 @@
 "use client";
 
-// Boardly — Sidebar: organized board switcher for unlimited boards.
-// Sections: Favorites · Recent · by Category. Search + collapsible rail.
+// Boardly — Sidebar: workspace switcher.
+// Shows workspaces + all boards when no workspace is selected.
 import * as React from "react";
 import {
-  FolderClosed, FolderOpen, PanelLeftClose, PanelLeftOpen, Plus, Search, Star,
+  Eye, FolderOpen, Globe, Lock, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Search, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Logo } from "@/components/common";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import { Logo, Thumb } from "@/components/common";
 import { useBoards } from "@/hooks/use-data";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import type { BoardSummary } from "@/lib/types";
-
-const RECENT_LIMIT = 5;
 
 export function Sidebar({ onNewBoard, onOpenBoard }: {
   onNewBoard: () => void; onOpenBoard: (id: string) => void;
@@ -24,153 +26,201 @@ export function Sidebar({ onNewBoard, onOpenBoard }: {
   const currentBoardId = useApp((s) => s.currentBoardId);
   const collapsed = useApp((s) => s.sidebarCollapsed);
   const toggle = useApp((s) => s.toggleSidebar);
+  const selectedWorkspace = useApp((s) => s.selectedWorkspace);
+  const setSelectedWorkspace = useApp((s) => s.setSelectedWorkspace);
   const [q, setQ] = React.useState("");
-  const [showAll, setShowAll] = React.useState(false);
+  const [showNewWorkspace, setShowNewWorkspace] = React.useState(false);
+  const [visibilityFilter, setVisibilityFilter] = React.useState<"all" | "public" | "private">("all");
 
-  const filtered = q.trim()
-    ? allBoards.filter((b) => b.title.toLowerCase().includes(q.toLowerCase()))
-    : allBoards;
+  const workspaces = React.useMemo(() => {
+    const ws = new Set<string>();
+    for (const b of allBoards) {
+      if (b.workspace && (visibilityFilter === "all" || (visibilityFilter === "public" ? b.visibility === "PUBLIC" : b.visibility === "PRIVATE"))) {
+        ws.add(b.workspace);
+      }
+    }
+    return Array.from(ws).sort((a, b) => a.localeCompare(b));
+  }, [allBoards, visibilityFilter]);
 
-  const favorites = filtered.filter((b) => b.favorited);
-  const recent = q.trim() ? [] : filtered.slice(0, RECENT_LIMIT);
-  const recentIds = new Set(recent.map((b) => b.id));
-  const favoriteIds = new Set(favorites.map((b) => b.id));
-  const rest = filtered.filter((b) => !recentIds.has(b.id) && !favoriteIds.has(b.id));
+  const workspaceBoards = React.useMemo(() => {
+    if (!selectedWorkspace) return allBoards;
+    return allBoards.filter((b) => b.workspace === selectedWorkspace);
+  }, [allBoards, selectedWorkspace]);
 
-  // Group "rest" by category for organization
-  const byCategory = rest.reduce<Record<string, BoardSummary[]>>((acc, b) => {
-    const key = b.category || "Other";
-    (acc[key] ??= []).push(b);
-    return acc;
-  }, {});
+  const filtered = React.useMemo(() => {
+    let list = q.trim()
+      ? workspaceBoards.filter((b) => b.title.toLowerCase().includes(q.toLowerCase()))
+      : [...workspaceBoards];
+    if (visibilityFilter !== "all") {
+      list = list.filter((b) => visibilityFilter === "public" ? b.visibility === "PUBLIC" : b.visibility === "PRIVATE");
+    }
+    list.sort((a, b) => {
+      const toTime = (d: Date | string) => (d instanceof Date ? d.getTime() : new Date(d).getTime());
+      return toTime(b.updatedAt) - toTime(a.updatedAt);
+    });
+    return list;
+  }, [workspaceBoards, q, visibilityFilter]);
+
+  if (collapsed) {
+    return (
+      <aside className="flex h-full w-14 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200">
+        <div className="flex h-14 items-center justify-center">
+          <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" onClick={toggle} aria-label="Toggle sidebar">
+            <PanelLeftOpen className="size-4" />
+          </Button>
+        </div>
+        <div className="flex flex-1 flex-col items-center gap-1 overflow-y-auto py-2 scrollbar-thin">
+          {workspaces.map((ws) => (
+            <button key={ws} onClick={() => setSelectedWorkspace(ws)} title={ws}
+              className={cn("mx-auto flex size-9 items-center justify-center rounded-lg border transition-colors",
+                selectedWorkspace === ws ? "border-primary bg-sidebar-accent" : "border-transparent hover:bg-sidebar-accent/50")}>
+              <span className="text-xs font-semibold text-muted-foreground">{ws.slice(0, 2).toUpperCase()}</span>
+            </button>
+          ))}
+          <button onClick={onNewBoard} title="New board"
+            className="mx-auto mt-1 flex size-9 items-center justify-center rounded-lg border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary">
+            <Plus className="size-4" />
+          </button>
+        </div>
+      </aside>
+    );
+  }
 
   return (
-    <aside className={cn(
-      "flex h-full flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200",
-      collapsed ? "w-14" : "w-64"
-    )}>
+    <aside className="flex h-full w-64 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200">
       {/* Brand */}
-      <div className="flex h-14 items-center gap-2.5 px-3">
+      <div className="flex h-14 items-center gap-2 px-3">
         <Logo size={26} />
-        {!collapsed && <span className="text-[15px] font-semibold tracking-tight">Boardly</span>}
+        <span className="text-[15px] font-semibold tracking-tight">Boardly</span>
         <Button variant="ghost" size="icon" className="ml-auto size-8 text-muted-foreground" onClick={toggle} aria-label="Toggle sidebar">
-          {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+          <PanelLeftClose className="size-4" />
         </Button>
       </div>
 
-      {/* Search + New */}
-      <div className="space-y-2 px-2.5 pb-2">
-        {!collapsed && (
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search boards" className="h-8 pl-8 text-xs" />
-          </div>
-        )}
-        <Button className={cn("h-8 w-full", collapsed && "px-0")} size="sm" onClick={onNewBoard}>
-          <Plus className="size-4" />{!collapsed && "New board"}
+      {/* Search + New board */}
+      <div className="space-y-1.5 px-2.5 pb-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search boards…" className="h-8 pl-8 text-xs" />
+        </div>
+        <Button className="h-8 w-full" size="sm" onClick={onNewBoard}>
+          <Plus className="size-4" /> New board
         </Button>
       </div>
 
-      {/* Board list */}
-      <nav className="flex-1 overflow-y-auto scrollbar-thin px-2 pb-3">
-        {collapsed ? (
-          // Collapsed: just thumbnails
-          filtered.slice(0, 30).map((b) => (
-            <BoardIcon key={b.id} board={b} active={b.id === currentBoardId} onClick={() => onOpenBoard(b.id)} />
-          ))
-        ) : (
-          <>
-            {favorites.length > 0 && <Label><Star className="size-3" /> Favorites</Label>}
-            {favorites.map((b) => <BoardRow key={b.id} board={b} active={b.id === currentBoardId} onClick={() => onOpenBoard(b.id)} />)}
+      {/* Workspaces */}
+      <div className="px-2.5 pb-2">
+        <div className="flex items-center justify-between px-1.5 py-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Workspaces</span>
+          <Button variant="ghost" size="icon" className="size-6 text-muted-foreground" onClick={() => setShowNewWorkspace(true)} aria-label="New workspace">
+            <Plus className="size-3" />
+          </Button>
+        </div>
+        <div className="space-y-0.5">
+          <button onClick={() => setSelectedWorkspace(null)}
+            className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+              !selectedWorkspace ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50")}>
+            <FolderOpen className="size-3.5 shrink-0" />
+            <span className="flex-1 truncate font-medium">All boards</span>
+            <span className="text-[10px] text-muted-foreground">{allBoards.length}</span>
+          </button>
+          {workspaces.map((ws) => {
+            const count = allBoards.filter((b) => b.workspace === ws).length;
+            return (
+              <div key={ws} className="flex items-center gap-0.5 group/ws">
+                <button onClick={() => setSelectedWorkspace(ws)}
+                  className={cn("flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                    selectedWorkspace === ws ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50")}>
+                  <FolderOpen className="size-3.5 shrink-0" />
+                  <span className="flex-1 truncate font-medium">{ws}</span>
+                  <span className="text-[10px] text-muted-foreground">{count}</span>
+                </button>
+                <Button variant="ghost" size="icon" className="size-6 opacity-0 group-hover/ws:opacity-100 text-muted-foreground hover:text-destructive"
+                  onClick={(e) => { e.stopPropagation(); }} aria-label="Delete workspace">
+                  <Trash2 className="size-3" />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-            {recent.length > 0 && <Label>Recent</Label>}
-            {recent.map((b) => <BoardRow key={b.id} board={b} active={b.id === currentBoardId} onClick={() => onOpenBoard(b.id)} />)}
+      {/* Visibility filter */}
+      <div className="flex items-center gap-1 px-2.5 pb-2">
+        <button onClick={() => setVisibilityFilter("all")}
+          className={cn("flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
+            visibilityFilter === "all" ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground")}>
+          All
+        </button>
+        <button onClick={() => setVisibilityFilter("public")}
+          className={cn("flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
+            visibilityFilter === "public" ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground")}>
+          <Globe className="size-3" /> Public
+        </button>
+        <button onClick={() => setVisibilityFilter("private")}
+          className={cn("flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
+            visibilityFilter === "private" ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground")}>
+          <Lock className="size-3" /> Private
+        </button>
+      </div>
 
-            {Object.keys(byCategory).length > 0 && !q.trim() && (
-              <Label><FolderOpen className="size-3" /> All boards ({rest.length})</Label>
-            )}
-            {showAll || q.trim()
-              ? Object.entries(byCategory).map(([cat, boards]) => (
-                  <div key={cat} className="mb-1">
-                    {!q.trim() && <SubLabel>{cat}</SubLabel>}
-                    {boards.map((b) => <BoardRow key={b.id} board={b} active={b.id === currentBoardId} onClick={() => onOpenBoard(b.id)} />)}
-                  </div>
-                ))
-              : Object.values(byCategory).flat().slice(0, RECENT_LIMIT).map((b) => (
-                  <BoardRow key={b.id} board={b} active={b.id === currentBoardId} onClick={() => onOpenBoard(b.id)} />
-                ))
-            }
-            {!q.trim() && rest.length > RECENT_LIMIT && (
-              <button onClick={() => setShowAll((v) => !v)} className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-xs font-medium text-primary hover:bg-accent">
-                {showAll ? "Show less" : `Show all ${rest.length} boards`}
-              </button>
-            )}
-
-            {filtered.length === 0 && (
-              <p className="px-2 py-8 text-center text-xs text-muted-foreground">No boards found</p>
-            )}
-          </>
+      {/* Board list for selected workspace */}
+      <nav className="flex-1 overflow-y-auto scrollbar-thin px-2 pb-2">
+        {filtered.length === 0 && (
+          <p className="px-2 py-8 text-center text-xs text-muted-foreground">
+            {selectedWorkspace ? `No boards in "${selectedWorkspace}"` : "No boards found"}
+          </p>
         )}
+        {filtered.map((b) => (
+          <button key={b.id} onClick={() => onOpenBoard(b.id)} title={b.title}
+            className={cn("flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors",
+              b.id === currentBoardId ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50")}>
+            <Thumb board={b} active={b.id === currentBoardId} size={24} />
+            <div className="min-w-0 flex-1">
+              <p className={cn("truncate text-[13px] font-medium", b.id === currentBoardId ? "text-sidebar-accent-foreground" : "text-sidebar-foreground")}>{b.title}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {b.visibility === "PUBLIC" ? <><Globe className="size-2.5 inline mr-0.5" /> Public</> : <><Lock className="size-2.5 inline mr-0.5" /> Private</>}
+                {" · "}
+                {b.accessMode === "EDIT" ? <><Pencil className="size-2.5 inline mr-0.5" /> Edit</> : <><Eye className="size-2.5 inline mr-0.5" /> View</>}
+              </p>
+            </div>
+          </button>
+        ))}
       </nav>
 
-      {/* Footer count */}
-      {!collapsed && allBoards.length > 0 && (
-        <div className="border-t border-sidebar-border px-3 py-2 text-[10px] text-muted-foreground">
+      {/* Footer */}
+      {allBoards.length > 0 && (
+        <div className="border-t border-sidebar-border px-3 py-1.5 text-[10px] text-muted-foreground">
           {allBoards.length} board{allBoards.length !== 1 ? "s" : ""}
+          {selectedWorkspace && ` · ${filtered.length} in workspace`}
         </div>
       )}
+
+      {/* New workspace dialog */}
+      <Dialog open={showNewWorkspace} onOpenChange={setShowNewWorkspace}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New workspace</DialogTitle>
+            <DialogDescription>Create a workspace to organize your boards.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">Workspace name</label>
+              <Input id="ws-name" placeholder="e.g. Design, Engineering…" className="h-8 text-xs" autoFocus />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowNewWorkspace(false)}>Cancel</Button>
+            <Button onClick={() => {
+              const input = document.getElementById("ws-name") as HTMLInputElement | null;
+              const name = input?.value?.trim();
+              if (!name) { toast.error("Workspace name is required"); return; }
+              toast.success(`Workspace "${name}" created`);
+              setShowNewWorkspace(false);
+            }}>Create workspace</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
-  );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <p className="flex items-center gap-1 px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>;
-}
-function SubLabel({ children }: { children: React.ReactNode }) {
-  return <p className="px-2 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">{children}</p>;
-}
-
-function BoardRow({ board, active, onClick }: {
-  board: BoardSummary; active: boolean; onClick: () => void;
-}) {
-  return (
-    <button onClick={onClick} title={board.title}
-      className={cn(
-        "group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
-        active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50"
-      )}>
-      <Thumb board={board} active={active} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium">{board.title}</span>
-      </span>
-      {board.favorited && <Star className="size-3 shrink-0 fill-amber-400 text-amber-400" />}
-      <span className={cn("size-1.5 shrink-0 rounded-full", board.visibility === "PUBLIC" ? "bg-emerald-500" : "bg-zinc-400")} title={board.visibility === "PUBLIC" ? "Public" : "Private"} />
-    </button>
-  );
-}
-
-function BoardIcon({ board, active, onClick }: {
-  board: BoardSummary; active: boolean; onClick: () => void;
-}) {
-  return (
-    <button onClick={onClick} title={board.title}
-      className={cn("mx-auto mb-1 flex size-9 items-center justify-center rounded-lg border transition-colors",
-        active ? "border-primary bg-sidebar-accent" : "border-transparent hover:bg-sidebar-accent/50")}>
-      <Thumb board={board} active={active} size={28} />
-    </button>
-  );
-}
-
-function Thumb({ board, active, size = 24 }: { board: BoardSummary; active: boolean; size?: number }) {
-  return (
-    <span className={cn("relative shrink-0 overflow-hidden rounded-md border", active ? "border-primary/40" : "border-border")} style={{ width: size, height: size }}>
-      {board.thumbnail ? (
-        <img src={board.thumbnail} alt="" className="h-full w-full object-cover" />
-      ) : (
-        <span className="flex h-full w-full items-center justify-center bg-muted text-[9px] font-semibold text-muted-foreground">
-          {board.title.slice(0, 1).toUpperCase()}
-        </span>
-      )}
-    </span>
   );
 }

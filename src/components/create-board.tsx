@@ -1,28 +1,47 @@
 "use client";
 
-// Boardly — Create board dialog (minimal: title + visibility)
+// Boardly — Create board dialog (title + visibility + workspace)
 import * as React from "react";
-import { Globe, Lock, Sparkles } from "lucide-react";
+import { Globe, Lock, Sparkles, FolderOpen } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useCreateBoard } from "@/hooks/use-data";
+import { useBoards } from "@/hooks/use-data";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { BoardSummary } from "@/lib/types";
 
 export function CreateBoardDialog({ open, onOpenChange, onCreated }: {
   open: boolean; onOpenChange: (v: boolean) => void; onCreated: (id: string) => void;
 }) {
   const create = useCreateBoard();
+  const { data } = useBoards();
+  const allBoards = (data?.boards ?? []).filter((b) => !b.archived);
   const [title, setTitle] = React.useState("");
   const [visibility, setVisibility] = React.useState<"PRIVATE" | "PUBLIC">("PRIVATE");
+  const [workspace, setWorkspace] = React.useState<string>("");
 
-  React.useEffect(() => { if (open) { setTitle(""); setVisibility("PRIVATE"); } }, [open]);
+  const workspaces = React.useMemo(() => {
+    const ws = new Set<string>();
+    for (const b of allBoards) {
+      if (b.workspace) ws.add(b.workspace);
+    }
+    return Array.from(ws).sort((a, b) => a.localeCompare(b));
+  }, [allBoards]);
+
+  React.useEffect(() => {
+    if (open) {
+      setTitle("");
+      setVisibility("PRIVATE");
+      setWorkspace("");
+    }
+  }, [open]);
 
   const submit = async () => {
     if (!title.trim()) return;
     try {
-      const r = await create.mutateAsync({ title: title.trim(), visibility });
+      const r = await create.mutateAsync({ title: title.trim(), visibility, workspace: workspace || null });
       toast.success("Board created");
       onCreated(r.board.id);
     } catch { toast.error("Could not create board"); }
@@ -56,6 +75,20 @@ export function CreateBoardDialog({ open, onOpenChange, onCreated }: {
                 </button>
               ))}
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium">Workspace</label>
+            <select
+              value={workspace}
+              onChange={(e) => setWorkspace(e.target.value)}
+              className="h-8 w-full rounded-md border border-border bg-background px-2.5 text-xs"
+            >
+              <option value="">— No workspace —</option>
+              {workspaces.map((ws) => (
+                <option key={ws} value={ws}>{ws}</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-muted-foreground">Boards are grouped by workspace in the sidebar.</p>
           </div>
         </div>
         <DialogFooter className="border-t border-border/60 bg-muted/30 px-5 py-4">

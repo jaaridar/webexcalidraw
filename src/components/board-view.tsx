@@ -5,7 +5,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
 import { TopBar } from "@/components/topbar";
-import { ControlCenter } from "@/components/control-center";
+import { BoardSwitcherBar } from "@/components/board-switcher-bar";
 import { DeniedGate, GuestNameGate, PasswordGate } from "@/components/access-gates";
 import { useAccess, useScene, useUpdateBoard } from "@/hooks/use-data";
 import { useApp } from "@/lib/store";
@@ -25,7 +25,6 @@ export function BoardView({ boardId, currentUser, onExit }: {
   const accessQ = useAccess(boardId);
   const [stage, setStage] = React.useState<Stage>("loading");
   const [presence, setPresence] = React.useState<PresenceUser[]>([]);
-  const [controlOpen, setControlOpen] = React.useState(false);
   const guest = useApp((s) => s.guest);
   const setGuestName = useApp((s) => s.setGuestName);
   const updateBoard = useUpdateBoard(boardId);
@@ -73,9 +72,9 @@ export function BoardView({ boardId, currentUser, onExit }: {
         presence={presence}
         isOwner={isOwner}
         onToggleFavorite={() => { updateBoard.mutate({ favorited: !board.favorited }); toast.success(board.favorited ? "Removed from favorites" : "Added to favorites"); }}
-        onOpenControl={() => setControlOpen(true)}
         onExit={onExit}
       />
+      <BoardSwitcherBar currentBoardId={boardId} />
       <div className="relative flex-1">
         {sceneQ.isLoading || !sceneQ.data ? (
           <div className="flex h-full w-full items-center justify-center bg-muted/20"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
@@ -94,7 +93,6 @@ export function BoardView({ boardId, currentUser, onExit }: {
           />
         )}
       </div>
-      {isOwner && <ControlCenter boardId={boardId} open={controlOpen} onOpenChange={setControlOpen} />}
     </div>
   );
 }

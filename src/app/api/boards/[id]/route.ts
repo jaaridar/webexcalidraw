@@ -66,6 +66,8 @@ export async function PATCH(
   if (typeof body.allowExport === "boolean") data.allowExport = body.allowExport;
   if (typeof body.allowDuplicate === "boolean")
     data.allowDuplicate = body.allowDuplicate;
+  if (typeof body.workspace === "string" || body.workspace === null)
+    data.workspace = body.workspace;
 
   // Password handling
   if (typeof body.passwordEnabled === "boolean") {

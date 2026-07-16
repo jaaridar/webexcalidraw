@@ -1,10 +1,10 @@
 "use client";
 
 // Boardly — TopBar: board control surface (features on top).
-// Shows collaborators, presence, access mode (live), share & control.
+// Shows collaborators, presence, visibility toggle, share mode dropdown, link copy.
 import * as React from "react";
 import {
-  ArrowLeft, Check, Copy, Eye, Globe, LogOut, Moon, Pencil, Share2, Shield, Star, Sun, UserCog,
+  ArrowLeft, Check, Copy, Eye, Globe, Lock, LogOut, Moon, Pencil, Share2, Star, Sun, UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarStack, MiniBadges, VisibilityPill } from "@/components/common";
@@ -25,14 +25,44 @@ import { toast } from "sonner";
 import type { Access, BoardSummary, PresenceUser, User } from "@/lib/types";
 
 export function TopBar({
-  board, access, presence, isOwner, onToggleFavorite, onOpenControl, onExit,
+  board, access, presence, isOwner, onToggleFavorite, onExit,
 }: {
   board: BoardSummary; access: Access; presence: PresenceUser[];
-  isOwner: boolean; onToggleFavorite: () => void; onOpenControl: () => void; onExit: () => void;
+  isOwner: boolean; onToggleFavorite: () => void; onExit: () => void;
 }) {
   const user = useApp((s) => s.user);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/?b=${board.id}` : "";
-  const [shareOpen, setShareOpen] = React.useState(false);
+  const updateBoard = useUpdateBoard(board.id);
+  const [shareMode, setShareMode] = React.useState<"VIEW" | "EDIT">(board.accessMode === "EDIT" ? "EDIT" : "VIEW");
+  const [copied, setCopied] = React.useState(false);
+  const [isPublic, setIsPublic] = React.useState(board.visibility === "PUBLIC");
+
+  React.useEffect(() => {
+    setIsPublic(board.visibility === "PUBLIC");
+  }, [board.visibility]);
+
+  const togglePublic = async () => {
+    const next = !isPublic;
+    try {
+      await updateBoard.mutateAsync({ visibility: next ? "PUBLIC" : "PRIVATE", accessMode: next ? shareMode : board.accessMode, shareMode: next ? "PUBLIC_LINK" : board.shareMode });
+      setIsPublic(next);
+      toast.success(next ? "Board is now public" : "Board is now private");
+    } catch { toast.error("Could not update visibility"); }
+  };
+
+  const applyShareMode = async (mode: "VIEW" | "EDIT") => {
+    setShareMode(mode);
+    if (!isPublic) return;
+    try {
+      await updateBoard.mutateAsync({ accessMode: mode, shareMode: "PUBLIC_LINK" });
+      toast.success(`Sharing as ${mode === "EDIT" ? "editable" : "read-only"}`);
+    } catch { toast.error("Could not update sharing"); }
+  };
+
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(shareUrl); setCopied(true); toast.success("Link copied"); setTimeout(() => setCopied(false), 1800); }
+    catch { toast.error("Could not copy link"); }
+  };
 
   return (
     <>
@@ -44,6 +74,11 @@ export function TopBar({
         <div className="flex min-w-0 items-center gap-2">
           <h1 className="truncate text-sm font-semibold sm:text-base">{board.title}</h1>
           <VisibilityPill visibility={board.visibility} className="hidden sm:inline-flex" />
+          {isOwner && (
+            <Button variant="ghost" size="icon" className="size-7 hidden sm:flex text-muted-foreground hover:text-foreground" onClick={togglePublic} aria-label={isPublic ? "Make private" : "Make public"}>
+              {isPublic ? <Lock className="size-3.5" /> : <Globe className="size-3.5" />}
+            </Button>
+          )}
           <MiniBadges passwordEnabled={board.passwordEnabled} collaborators={board.collaboratorCount} className="hidden md:flex" />
         </div>
 
@@ -55,7 +90,7 @@ export function TopBar({
 
         <div className="ml-auto flex items-center gap-1.5">
           {/* Live collaborators — always visible when present */}
-          <CollaboratorIndicator presence={presence} collaboratorCount={board.collaboratorCount} onOpenControl={isOwner ? onOpenControl : undefined} />
+          <CollaboratorIndicator presence={presence} collaboratorCount={board.collaboratorCount} />
 
           {/* Role indicator for non-owners */}
           {!isOwner && (
@@ -65,15 +100,36 @@ export function TopBar({
             </span>
           )}
 
-          {/* Share */}
-          <Button variant="outline" size="sm" className="h-8" onClick={() => setShareOpen(true)}>
-            <Share2 className="size-3.5" /> <span className="hidden sm:inline">Share</span>
-          </Button>
+          {/* Public sharing controls — only visible to owner when public */}
+          {isOwner && isPublic && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8">
+                  <Share2 className="size-3.5" /> <span className="hidden sm:inline">{shareMode === "EDIT" ? "Editable" : "Read-only"}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Sharing mode</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => applyShareMode("VIEW")} className={cn("gap-2", shareMode === "VIEW" && "font-medium")}>
+                  <Eye className="size-4" /> Read only
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => applyShareMode("EDIT")} className={cn("gap-2", shareMode === "EDIT" && "font-medium")}>
+                  <Pencil className="size-4" /> Edit only
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={copyLink} className="gap-2">
+                  {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
+                  {copied ? "Copied" : "Copy link"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
-          {/* Control center — owner only */}
-          {isOwner && (
-            <Button variant="outline" size="sm" className="h-8" onClick={onOpenControl}>
-              <Shield className="size-3.5" /> <span className="hidden sm:inline">Control</span>
+          {/* Private toggle for owner */}
+          {isOwner && !isPublic && (
+            <Button variant="outline" size="sm" className="h-8" onClick={togglePublic}>
+              <Globe className="size-3.5" /> <span className="hidden sm:inline">Make public</span>
             </Button>
           )}
 
@@ -82,14 +138,14 @@ export function TopBar({
         </div>
       </header>
 
-      <ShareDialog open={shareOpen} onOpenChange={setShareOpen} url={shareUrl} board={board} isOwner={isOwner} onOpenControl={onOpenControl} />
+      <ShareDialog open={false} onOpenChange={() => {}} url={shareUrl} board={board} />
     </>
   );
 }
 
 // Live collaborator indicator — shows presence avatars + names on hover
-function CollaboratorIndicator({ presence, collaboratorCount, onOpenControl }: {
-  presence: PresenceUser[]; collaboratorCount: number; onOpenControl?: () => void;
+function CollaboratorIndicator({ presence, collaboratorCount }: {
+  presence: PresenceUser[]; collaboratorCount: number;
 }) {
   if (presence.length === 0 && collaboratorCount === 0) return null;
   const users = presence.length > 0 ? presence : [];
@@ -125,12 +181,6 @@ function CollaboratorIndicator({ presence, collaboratorCount, onOpenControl }: {
                 </div>
               </div>
             ))
-          )}
-          {onOpenControl && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onOpenControl}><Shield className="size-4" /> Manage access</DropdownMenuItem>
-            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
@@ -220,8 +270,8 @@ function ProfileEditDialog({ open, onOpenChange, user }: {
   );
 }
 
-function ShareDialog({ open, onOpenChange, url, board, isOwner, onOpenControl }: {
-  open: boolean; onOpenChange: (v: boolean) => void; url: string; board: BoardSummary; isOwner: boolean; onOpenControl: () => void;
+function ShareDialog({ open, onOpenChange, url, board }: {
+  open: boolean; onOpenChange: (v: boolean) => void; url: string; board: BoardSummary;
 }) {
   const [copied, setCopied] = React.useState(false);
   const copy = async () => { try { await navigator.clipboard.writeText(url); setCopied(true); toast.success("Link copied"); setTimeout(() => setCopied(false), 1800); } catch {} };
@@ -236,14 +286,9 @@ function ShareDialog({ open, onOpenChange, url, board, isOwner, onOpenControl }:
           </div>
           <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
             {board.visibility === "PRIVATE"
-              ? "This board is private. Make it public from the Control Center to share a link."
+              ? "This board is private. Make it public to share a link."
               : `Anyone with the link can ${board.accessMode === "EDIT" ? "edit" : "view"} this board${board.passwordEnabled ? " (password required)." : "."}`}
           </div>
-          {isOwner && (
-            <Button variant="outline" className="w-full" onClick={() => { onOpenChange(false); onOpenControl(); }}>
-              <Shield className="size-4" /> Open Control Center
-            </Button>
-          )}
         </div>
       </DialogContent>
     </Dialog>

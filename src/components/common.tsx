@@ -1,6 +1,7 @@
 // Boardly — shared presentational primitives
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Globe, Lock, Pencil, Users } from "lucide-react";
+import type { BoardSummary } from "@/lib/types";
 
 export function Logo({ size = 28, className }: { size?: number; className?: string }) {
   return (
@@ -94,5 +95,19 @@ export function MiniBadges({ passwordEnabled, collaborators, className }: {
         </span>
       )}
     </div>
+  );
+}
+
+export function Thumb({ board, active, size = 24 }: { board: BoardSummary; active: boolean; size?: number }) {
+  return (
+    <span className={cn("relative shrink-0 overflow-hidden rounded-md border", active ? "border-primary/40" : "border-border")} style={{ width: size, height: size }}>
+      {board.thumbnail ? (
+        <img src={board.thumbnail} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center bg-muted text-[9px] font-semibold text-muted-foreground">
+          {board.title.slice(0, 1).toUpperCase()}
+        </span>
+      )}
+    </span>
   );
 }
