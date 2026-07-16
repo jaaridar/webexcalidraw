@@ -13,7 +13,25 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 15_000,
             refetchOnWindowFocus: false,
-            retry: 1,
+            // Don't retry 4xx client errors (401/403/404 etc.) — they won't
+            // succeed on retry and just surface as console noise.
+            retry: (failureCount, error: unknown) => {
+              const msg = error instanceof Error ? error.message : "";
+              if (
+                msg === "Unauthorized" ||
+                msg === "Forbidden" ||
+                msg === "Not found" ||
+                msg === "Read-only access" ||
+                msg === "Incorrect password" ||
+                msg === "Password required"
+              ) {
+                return false;
+              }
+              return failureCount < 1;
+            },
+          },
+          mutations: {
+            retry: false,
           },
         },
       })

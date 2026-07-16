@@ -7,7 +7,6 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { Dashboard } from "@/components/dashboard/dashboard";
-import { Logo } from "@/components/boardly/logo";
 
 // Code-split the board view (+ Excalidraw) so the dashboard route stays light.
 const BoardView = dynamic(
@@ -18,9 +17,7 @@ const BoardView = dynamic(
 function FullScreenLoader({ label }: { label: string }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
-      <div className="animate-pulse">
-        <Logo size={48} />
-      </div>
+      <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       <p className="text-sm text-muted-foreground">{label}</p>
     </div>
   );
@@ -44,7 +41,18 @@ export function AppShell() {
     if (sessionQuery.data?.user) {
       setUser(sessionQuery.data.user);
     } else if (sessionQuery.data && !sessionQuery.data.user && !boardId) {
-      api.provisionSession().then((r) => setUser(r.user));
+      api
+        .provisionSession()
+        .then((r) => setUser(r.user))
+        .catch(() => {
+          // If provisioning fails, retry once after a short delay
+          setTimeout(() => {
+            api
+              .provisionSession()
+              .then((r) => setUser(r.user))
+              .catch(() => {});
+          }, 1500);
+        });
     }
   }, [sessionQuery.data, setUser, boardId]);
 
