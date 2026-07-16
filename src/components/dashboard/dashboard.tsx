@@ -81,6 +81,7 @@ export function Dashboard({ onOpenBoard }: { onOpenBoard: (id: string) => void }
   const boardsQuery = useQuery({
     queryKey: ["boards", boardsNonce],
     queryFn: api.listBoards,
+    enabled: !!user,
   });
 
   const boards = boardsQuery.data?.boards ?? [];

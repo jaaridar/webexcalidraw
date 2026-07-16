@@ -1,4 +1,4 @@
-// Boardly — typed frontend API client
+// Boardly — typed frontend API client with auto-session-recovery
 import type { AccessResult } from "@/lib/boards";
 
 export type SessionUser = {
@@ -88,35 +88,85 @@ export type AccessInfo = {
   role: string | null;
 };
 
-function json<T>(): (res: Response) => Promise<T> {
-  return async (res: Response) => {
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error((e as { error?: string }).error || res.statusText);
+// --- Auto-session-recovery fetch wrapper ---
+// If any authenticated request returns 401, we automatically provision a
+// session (POST /api/auth/session) and retry the original request once.
+// This eliminates "Unauthorized" errors from race conditions where the
+// session cookie isn't established yet.
+
+let provisioningPromise: Promise<void> | null = null;
+
+async function provisionSession(): Promise<void> {
+  if (!provisioningPromise) {
+    provisioningPromise = fetch("/api/auth/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      credentials: "include",
+    })
+      .then(() => {
+        provisioningPromise = null;
+      })
+      .catch(() => {
+        provisioningPromise = null;
+      });
+  }
+  return provisioningPromise;
+}
+
+async function request<T>(
+  url: string,
+  options: RequestInit = {},
+  isRetry = false
+): Promise<T> {
+  const res = await fetch(url, {
+    ...options,
+    credentials: "include",
+    cache: options.cache || "default",
+  });
+
+  if (!res.ok) {
+    // Auto-recover from 401 by provisioning a session and retrying once
+    if (res.status === 401 && !isRetry && !url.includes("/api/auth/")) {
+      await provisionSession();
+      return request<T>(url, options, true);
     }
-    return (await res.json()) as T;
-  };
+    const e = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((e as { error?: string }).error || res.statusText);
+  }
+  return (await res.json()) as T;
 }
 
 export const api = {
   // auth
   getSession: () =>
-    fetch("/api/auth/session", { cache: "no-store" }).then(json<{ user: SessionUser | null }>()),
-  provisionSession: (body?: { name?: string; email?: string; avatarColor?: string }) =>
-    fetch("/api/auth/session", {
+    request<{ user: SessionUser | null }>("/api/auth/session", {
+      cache: "no-store",
+    }),
+  provisionSession: (body?: {
+    name?: string;
+    email?: string;
+    avatarColor?: string;
+  }) =>
+    request<{ user: SessionUser }>("/api/auth/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body ?? {}),
-    }).then(json<{ user: SessionUser }>()),
-  updateProfile: (body: { name?: string; email?: string; avatarColor?: string }) =>
-    fetch("/api/auth/profile", {
+    }),
+  updateProfile: (body: {
+    name?: string;
+    email?: string;
+    avatarColor?: string;
+  }) =>
+    request<{ user: SessionUser }>("/api/auth/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).then(json<{ user: SessionUser }>()),
+    }),
 
   // boards
-  listBoards: () => fetch("/api/boards", { cache: "no-store" }).then(json<{ boards: BoardCard[] }>()),
+  listBoards: () =>
+    request<{ boards: BoardCard[] }>("/api/boards", { cache: "no-store" }),
   createBoard: (body: {
     title: string;
     description?: string;
@@ -126,65 +176,87 @@ export const api = {
     category?: string | null;
     elements?: string;
   }) =>
-    fetch("/api/boards", {
+    request<{ board: BoardCard }>("/api/boards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).then(json<{ board: BoardCard }>()),
-  getBoard: (id: string) => fetch(`/api/boards/${id}`).then(json<{ board: BoardDetail }>()),
+    }),
+  getBoard: (id: string) => request<{ board: BoardDetail }>(`/api/boards/${id}`),
   updateBoard: (id: string, body: Record<string, unknown>) =>
-    fetch(`/api/boards/${id}`, {
+    request<{ board: BoardDetail }>(`/api/boards/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).then(json<{ board: BoardDetail }>()),
+    }),
   deleteBoard: (id: string) =>
-    fetch(`/api/boards/${id}`, { method: "DELETE" }).then(json<{ ok: boolean }>()),
+    request<{ ok: boolean }>(`/api/boards/${id}`, { method: "DELETE" }),
   duplicateBoard: (id: string) =>
-    fetch(`/api/boards/${id}/duplicate`, { method: "POST" }).then(json<{ board: BoardCard }>()),
+    request<{ board: BoardCard }>(`/api/boards/${id}/duplicate`, {
+      method: "POST",
+    }),
 
   // access & scene
-  getAccess: (id: string) => fetch(`/api/boards/${id}/access`).then(json<AccessInfo>()),
+  getAccess: (id: string) => request<AccessInfo>(`/api/boards/${id}/access`),
   verifyPassword: (id: string, password: string) =>
-    fetch(`/api/boards/${id}/access`, {
+    request<{ ok: boolean }>(`/api/boards/${id}/access`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
-    }).then(json<{ ok: boolean }>()),
+    }),
   getScene: (id: string) =>
-    fetch(`/api/boards/${id}/scene`).then(
-      json<{ elements: string; appState: string | null; access: AccessResult; canEdit: boolean; allowExport: boolean }>()
+    request<{
+      elements: string;
+      appState: string | null;
+      access: AccessResult;
+      canEdit: boolean;
+      allowExport: boolean;
+    }>(`/api/boards/${id}/scene`),
+  saveScene: (
+    id: string,
+    body: { elements?: string; appState?: string; thumbnail?: string }
+  ) =>
+    request<{ ok: boolean; updated: boolean; updatedAt?: string }>(
+      `/api/boards/${id}/save`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
     ),
-  saveScene: (id: string, body: { elements?: string; appState?: string; thumbnail?: string }) =>
-    fetch(`/api/boards/${id}/save`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }).then(json<{ ok: boolean; updated: boolean; updatedAt?: string }>()),
 
   // collaborators
   listCollaborators: (id: string) =>
-    fetch(`/api/boards/${id}/collaborators`).then(
-      json<{ collaborators: Collaborator[]; owner: { id: string } }>()
-    ),
+    request<{
+      collaborators: Collaborator[];
+      owner: { id: string };
+    }>(`/api/boards/${id}/collaborators`),
   inviteCollaborator: (id: string, body: { email: string; role: string }) =>
-    fetch(`/api/boards/${id}/collaborators`, {
+    request<{ collaborator: Collaborator }>(`/api/boards/${id}/collaborators`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).then(json<{ collaborator: Collaborator }>()),
-  updateCollaborator: (id: string, userId: string, body: { role: string }) =>
-    fetch(`/api/boards/${id}/collaborators/${userId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }).then(json<{ collaborator: Collaborator }>()),
-  removeCollaborator: (id: string, userId: string) =>
-    fetch(`/api/boards/${id}/collaborators/${userId}`, { method: "DELETE" }).then(
-      json<{ ok: boolean }>()
+    }),
+  updateCollaborator: (
+    id: string,
+    userId: string,
+    body: { role: string }
+  ) =>
+    request<{ collaborator: Collaborator }>(
+      `/api/boards/${id}/collaborators/${userId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
     ),
+  removeCollaborator: (id: string, userId: string) =>
+    request<{ ok: boolean }>(`/api/boards/${id}/collaborators/${userId}`, {
+      method: "DELETE",
+    }),
 
   // seed
   seedBoards: () =>
-    fetch("/api/boards/seed", { method: "POST" }).then(json<{ seeded: boolean; count: number }>()),
+    request<{ seeded: boolean; count: number }>("/api/boards/seed", {
+      method: "POST",
+    }),
 };

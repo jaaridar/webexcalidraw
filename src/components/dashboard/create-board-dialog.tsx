@@ -99,7 +99,11 @@ export function CreateBoardDialog({
   // an update if the user enabled it.
   const submit = async () => {
     if (!canCreate) return;
-    await createMutation.mutateAsync();
+    try {
+      await createMutation.mutateAsync();
+    } catch {
+      // error already handled by mutation's onError toast
+    }
   };
 
   return (
