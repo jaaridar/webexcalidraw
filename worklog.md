@@ -83,3 +83,39 @@ Environment note: The Next.js 16 + Turbopack dev server with the large @excalidr
 Stage Summary:
 - Complete, production-style Boardly SaaS delivered: permission-first Excalidraw boards, owner dashboard with live thumbnails, full Board Control Center, real-time collaboration, and secure viewer/editor access via share links.
 - All core PRD flows verified end-to-end in the browser.
+
+---
+Task ID: 14
+Agent: Orchestrator
+Task: Full rebuild & redesign — board-first, modular, premium SaaS
+
+Work Log:
+- Rebuilt entire frontend with clean modular architecture:
+  * src/lib/types.ts — central type definitions (single source of truth)
+  * src/lib/store.ts — Zustand (currentBoardId, sidebarCollapsed, user, guest)
+  * src/lib/api.ts — auto-recovering API client (cleaned, typed)
+  * src/hooks/use-data.ts — all React Query hooks (queries + mutations)
+  * src/components/common.tsx — Logo, Avatar, AvatarStack, VisibilityPill, AccessPill, MiniBadges
+  * src/components/sidebar.tsx — minimal board switcher (thumbnail + title only, collapsible 56px rail)
+  * src/components/topbar.tsx — board control surface (features on top: visibility pill, favorite, presence, share, control, profile)
+  * src/components/board-view.tsx — composes access gate → topbar + canvas
+  * src/components/board-canvas.tsx — Excalidraw + socket.io real-time collab
+  * src/components/access-gates.tsx — DeniedGate, PasswordGate, GuestNameGate
+  * src/components/control-center.tsx — redesigned permission panel (8 sections)
+  * src/components/create-board.tsx — minimal create dialog (title + visibility)
+  * src/components/app-shell.tsx — board-first routing (opens most recent board)
+- Deleted old: dashboard.tsx, board-card.tsx, control-center.tsx (old), create-board-dialog.tsx, board-view.tsx (old), excalidraw-canvas.tsx, boardly/*
+- Refined premium design system (globals.css): sophisticated emerald-on-neutrals, glass header, soft shadows, thin scrollbars
+- UX change (per user request): board-first, not dashboard-grid. Opens directly into a board. Sidebar = minimal switcher (thumbnail + title). All metadata (visibility, favorite, collaborators, password, access) lives in the TopBar (compact pills) + Control Center (full panel). Nothing clutters the default view.
+
+Verification (Agent Browser):
+- Board-first: app opens directly into most recent board (?b= auto-set). Sidebar + TopBar + Excalidraw. Zero errors.
+- Switch boards via sidebar (7 items, minimal). Works.
+- Create board: minimal dialog → opens Excalidraw. Works. 0 errors, 0 401s.
+- Control Center: 8 sections render. Works.
+- Favorite toggle: updates sidebar favorites section. Works.
+- Sidebar collapse: 240px → 56px rail. Works.
+- Lint: 0 errors.
+
+Stage Summary:
+- Complete rebuild delivered: board-first, modular, premium. ~12 focused component files, centralized types/hooks/store. Any developer can navigate it easily.

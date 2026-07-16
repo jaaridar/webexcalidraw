@@ -1,63 +1,51 @@
-// Boardly — client app state
+// Boardly — global client state (Zustand)
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { SessionUser } from "@/lib/api";
-import { DEFAULT_AVATAR_COLOR } from "@/lib/constants";
+import type { User } from "@/lib/types";
 
-type GuestIdentity = {
-  id: string;
-  name: string;
-  avatarColor: string;
-};
+type Guest = { id: string; name: string; avatarColor: string };
 
 type AppState = {
-  user: SessionUser | null;
-  setUser: (u: SessionUser | null) => void;
-  // guest identity for shared-board presence (when not signed in)
-  guest: GuestIdentity;
-  ensureGuest: () => GuestIdentity;
+  // session
+  user: User | null;
+  setUser: (u: User | null) => void;
+  // active board
+  currentBoardId: string | null;
+  setCurrentBoard: (id: string | null) => void;
+  // sidebar
+  sidebarCollapsed: boolean;
+  toggleSidebar: () => void;
+  // guest identity (for shared-board presence)
+  guest: Guest;
   setGuestName: (name: string) => void;
-  // bump to refetch boards list
-  boardsNonce: number;
-  bumpBoards: () => void;
 };
 
-function randomId() {
-  return "g_" + Math.random().toString(36).slice(2, 10);
-}
-
-function randomGuest(): GuestIdentity {
-  const names = ["Guest Sparrow", "Guest Fox", "Guest Maple", "Guest River", "Guest Sage"];
+function makeGuest(): Guest {
+  const names = ["Sparrow", "Fox", "Maple", "River", "Sage", "Falcon"];
   return {
-    id: randomId(),
-    name: names[Math.floor(Math.random() * names.length)],
-    avatarColor: DEFAULT_AVATAR_COLOR,
+    id: "g_" + Math.random().toString(36).slice(2, 10),
+    name: "Guest " + names[Math.floor(Math.random() * names.length)],
+    avatarColor: "#10b981",
   };
 }
 
 export const useApp = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
-      setUser: (u) => set({ user: u }),
-      guest: randomGuest(),
-      ensureGuest: () => {
-        const g = get().guest;
-        if (!g?.id) {
-          const ng = randomGuest();
-          set({ guest: ng });
-          return ng;
-        }
-        return g;
-      },
+      setUser: (user) => set({ user }),
+      currentBoardId: null,
+      setCurrentBoard: (currentBoardId) => set({ currentBoardId }),
+      sidebarCollapsed: false,
+      toggleSidebar: () =>
+        set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      guest: makeGuest(),
       setGuestName: (name) =>
         set((s) => ({ guest: { ...s.guest, name: name.trim() || "Guest" } })),
-      boardsNonce: 0,
-      bumpBoards: () => set((s) => ({ boardsNonce: s.boardsNonce + 1 })),
     }),
     {
-      name: "boardly-app",
-      partialize: (s) => ({ guest: s.guest }) as AppState,
+      name: "boardly",
+      partialize: (s) => ({ guest: s.guest, sidebarCollapsed: s.sidebarCollapsed }),
     }
   )
 );
