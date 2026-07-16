@@ -80,9 +80,17 @@ export function BoardCard({
         className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-premium transition-all hover:-translate-y-1 hover:shadow-premium-lg"
       >
         {/* Thumbnail */}
-        <button
+        <div
+          role="button"
+          tabIndex={0}
           onClick={onOpen}
-          className="relative block aspect-[16/10] w-full overflow-hidden border-b border-border bg-muted/40"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onOpen();
+            }
+          }}
+          className="relative block aspect-[16/10] w-full cursor-pointer overflow-hidden border-b border-border bg-muted/40"
           aria-label={`Open ${board.title}`}
         >
           {board.thumbnail ? (
@@ -128,7 +136,7 @@ export function BoardCard({
               <ExternalLink className="size-3.5" /> Open board
             </span>
           </div>
-        </button>
+        </div>
 
         {/* Body */}
         <div className="flex flex-1 flex-col gap-2 p-4">

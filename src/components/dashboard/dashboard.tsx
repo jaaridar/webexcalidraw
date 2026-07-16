@@ -83,16 +83,6 @@ export function Dashboard({ onOpenBoard }: { onOpenBoard: (id: string) => void }
     queryFn: api.listBoards,
   });
 
-  // Safety net: ensure demo boards exist for returning owners (idempotent)
-  React.useEffect(() => {
-    api
-      .seedBoards()
-      .then((r) => {
-        if (r.seeded) qc.invalidateQueries({ queryKey: ["boards"] });
-      })
-      .catch(() => {});
-  }, []);
-
   const boards = boardsQuery.data?.boards ?? [];
 
   const filtered = React.useMemo(() => {
