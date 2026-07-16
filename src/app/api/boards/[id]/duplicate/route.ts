@@ -1,16 +1,14 @@
 // Boardly — duplicate a board
+// Owner is auto-recognized; guests/collaborators go through access control.
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getSessionUser, getUnlockedBoards } from "@/lib/auth";
-import { evaluateAccess } from "@/lib/boards";
-import { serializeBoardCard } from "@/lib/boards";
+import { getSessionUser, getOwner, getUnlockedBoards } from "@/lib/auth";
+import { evaluateAccess, serializeBoardCard } from "@/lib/boards";
 
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const unlocked = await getUnlockedBoards();
   const { id } = await params;
 
@@ -19,6 +17,12 @@ export async function POST(
     include: { collaborators: true },
   });
   if (!board) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Try session user first; if none, use the owner
+  let user = await getSessionUser();
+  if (!user) {
+    user = await getOwner();
+  }
 
   // Owner can always duplicate; otherwise must have access AND allowDuplicate
   const access = evaluateAccess(board, user, unlocked);

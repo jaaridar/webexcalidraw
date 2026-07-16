@@ -1,8 +1,9 @@
 // Boardly — shared board access (public link viewers/editors)
+// Owner is auto-recognized; guests/collaborators go through access control.
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
-import { getSessionUser, getUnlockedBoards, unlockBoard } from "@/lib/auth";
+import { getSessionUser, getOwner, getUnlockedBoards, unlockBoard } from "@/lib/auth";
 import { evaluateAccess, getCollaboratorRole } from "@/lib/boards";
 
 // GET access info for a board (does NOT leak elements)
@@ -10,7 +11,6 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
   const unlocked = await getUnlockedBoards();
   const { id } = await params;
 
@@ -20,6 +20,15 @@ export async function GET(
   });
 
   if (!board) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Try session user first; if none, check if this is the owner's board
+  let user = await getSessionUser();
+  if (!user) {
+    const owner = await getOwner();
+    if (board.ownerId === owner.id) {
+      user = owner;
+    }
+  }
 
   const access = evaluateAccess(board, user, unlocked);
 
@@ -57,14 +66,13 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
   const { id } = await params;
-
   const board = await db.board.findUnique({ where: { id } });
   if (!board) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Owner bypasses password
-  if (user && board.ownerId === user.id) {
+  const owner = await getOwner();
+  if (board.ownerId === owner.id) {
     return NextResponse.json({ ok: true });
   }
 

@@ -35,26 +35,19 @@ export function AppShell() {
     queryFn: api.getSession,
   });
 
-  // Always provision a session if there isn't one — even for board views.
-  // This ensures the owner never sees "invite-only" on their own board when
-  // opening a board URL without an active session.
+  // For the dashboard: provision an owner session if there isn't one.
+  // For shared board views: don't provision — let the BoardView handle
+  // access (owner with cookie, or guest without).
   React.useEffect(() => {
     if (sessionQuery.data?.user) {
       setUser(sessionQuery.data.user);
-    } else if (sessionQuery.data && !sessionQuery.data.user) {
+    } else if (sessionQuery.data && !sessionQuery.data.user && !boardId) {
       api
         .provisionSession()
         .then((r) => setUser(r.user))
-        .catch(() => {
-          setTimeout(() => {
-            api
-              .provisionSession()
-              .then((r) => setUser(r.user))
-              .catch(() => {});
-          }, 1500);
-        });
+        .catch(() => {});
     }
-  }, [sessionQuery.data, setUser]);
+  }, [sessionQuery.data, setUser, boardId]);
 
   const goDashboard = React.useCallback(() => {
     router.push("/");
@@ -68,8 +61,6 @@ export function AppShell() {
   );
 
   // Shared board view — works for owners, collaborators, and guests alike.
-  // Pass the current user so the board view can re-evaluate access when the
-  // session becomes available.
   if (boardId) {
     return <BoardView key={boardId} boardId={boardId} currentUser={user} onExit={goDashboard} />;
   }

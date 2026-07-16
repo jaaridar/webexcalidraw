@@ -1,7 +1,7 @@
-// Boardly — collaborators (invite / list)
+// Boardly — collaborators (invite / list) — owner endpoints, no session required
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getSessionUser, pickAvatarColor } from "@/lib/auth";
+import { getOwner, pickAvatarColor } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
 
 // GET collaborators (owner only)
@@ -9,13 +9,12 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const owner = await getOwner();
   const { id } = await params;
 
   const board = await db.board.findUnique({ where: { id } });
   if (!board) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (board.ownerId !== user.id)
+  if (board.ownerId !== owner.id)
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const collaborators = await db.collaborator.findMany({
@@ -46,13 +45,12 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const owner = await getOwner();
   const { id } = await params;
 
   const board = await db.board.findUnique({ where: { id } });
   if (!board) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (board.ownerId !== user.id)
+  if (board.ownerId !== owner.id)
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
@@ -60,7 +58,7 @@ export async function POST(
   const role = (body.role as string) === ROLE.EDITOR ? ROLE.EDITOR : ROLE.VIEWER;
 
   if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
-  if (email === user.email?.toLowerCase())
+  if (email === owner.email.toLowerCase())
     return NextResponse.json({ error: "You are already the owner" }, { status: 400 });
 
   // find or create user

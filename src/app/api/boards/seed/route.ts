@@ -1,23 +1,22 @@
-// Boardly — seed demo boards for the current owner (idempotent: only if 0 boards)
+// Boardly — seed demo boards (owner endpoint, no session required)
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getSessionUser } from "@/lib/auth";
+import { getOwner } from "@/lib/auth";
 import { getDemoScenes } from "@/lib/demo-scenes";
 import { elementsToSvg, svgToDataUrl } from "@/lib/excalidraw-to-svg";
+import { BOARDLY_CONFIG } from "@/lib/config";
+import bcrypt from "bcryptjs";
 
-export async function POST() {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const count = await db.board.count({ where: { ownerId: user.id } });
-  if (count > 0) {
-    return NextResponse.json({ seeded: false, count });
-  }
-
+async function seedDemoBoards(ownerId: string) {
+  const count = await db.board.count({ where: { ownerId } });
+  if (count > 0) return;
   const scenes = getDemoScenes();
   for (const s of scenes) {
     const elementsJson = JSON.stringify(s.elements);
     const thumb = svgToDataUrl(elementsToSvg(elementsJson, { bg: "#fafaf9" }));
+    const passwordHash = s.passwordEnabled
+      ? await bcrypt.hash(BOARDLY_CONFIG.demoPassword, 10)
+      : null;
     await db.board.create({
       data: {
         title: s.title,
@@ -27,27 +26,19 @@ export async function POST() {
         accessMode: s.accessMode,
         shareMode: s.shareMode,
         passwordEnabled: s.passwordEnabled,
-        passwordHash: s.passwordEnabled
-          ? "$2a$10$seedplaceholderhashforbiddenemo000000000000000000000000000"
-          : null,
+        passwordHash,
         favorited: s.favorited,
         elements: elementsJson,
         thumbnail: thumb,
-        ownerId: user.id,
+        ownerId,
       },
     });
   }
+}
 
-  // Replace the placeholder password hash for the roadmap board with a real hash
-  // Password for the demo protected board: "boardly"
-  const bcrypt = await import("bcryptjs");
-  const hash = await bcrypt.hash("boardly", 10);
-  const roadmap = await db.board.findFirst({
-    where: { ownerId: user.id, title: "Product Roadmap — Q4" },
-  });
-  if (roadmap && roadmap.passwordHash?.startsWith("$2a$10$seed")) {
-    await db.board.update({ where: { id: roadmap.id }, data: { passwordHash: hash } });
-  }
-
-  return NextResponse.json({ seeded: true, count: scenes.length });
+export async function POST() {
+  const owner = await getOwner();
+  await seedDemoBoards(owner.id);
+  const count = await db.board.count({ where: { ownerId: owner.id } });
+  return NextResponse.json({ seeded: count > 0, count });
 }

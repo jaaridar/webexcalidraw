@@ -1,15 +1,13 @@
-// Boardly — auth session endpoints
+// Boardly — session endpoints
+// The owner is auto-created/provisioned. No login required for the dashboard.
+// Shared boards: if there's a cookie, the user is the owner/collaborator.
+// If no cookie, the user is a guest (session returns null).
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import {
-  getSessionUser,
-  setSession,
-  pickAvatarColor,
-  type SessionUser,
-} from "@/lib/auth";
-import { DEFAULT_AVATAR_COLOR } from "@/lib/constants";
+import { getOwner, getSessionUser, setSession, type SessionUser } from "@/lib/auth";
 import { getDemoScenes } from "@/lib/demo-scenes";
 import { elementsToSvg, svgToDataUrl } from "@/lib/excalidraw-to-svg";
+import { BOARDLY_CONFIG } from "@/lib/config";
+import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
 async function seedDemoBoards(ownerId: string) {
@@ -20,7 +18,7 @@ async function seedDemoBoards(ownerId: string) {
     const elementsJson = JSON.stringify(s.elements);
     const thumb = svgToDataUrl(elementsToSvg(elementsJson, { bg: "#fafaf9" }));
     const passwordHash = s.passwordEnabled
-      ? await bcrypt.hash("boardly", 10)
+      ? await bcrypt.hash(BOARDLY_CONFIG.demoPassword, 10)
       : null;
     await db.board.create({
       data: {
@@ -41,70 +39,23 @@ async function seedDemoBoards(ownerId: string) {
   }
 }
 
-// GET current session user
+// GET current session user. Returns the owner if a cookie is set, otherwise
+// null (guest). The dashboard calls POST to provision a cookie.
 export async function GET() {
+  const owner = await getOwner();
+  if (BOARDLY_CONFIG.autoSeed) {
+    await seedDemoBoards(owner.id);
+  }
   const user = await getSessionUser();
   return NextResponse.json({ user });
 }
 
-// POST — provision / sign in a user by name+email, or create default demo owner
-export async function POST(req: Request) {
-  let body: { name?: string; email?: string; avatarColor?: string } = {};
-  try {
-    body = await req.json();
-  } catch {
-    body = {};
+// POST — set the owner session cookie (called by the dashboard on first load)
+export async function POST() {
+  const owner = await getOwner();
+  if (BOARDLY_CONFIG.autoSeed) {
+    await seedDemoBoards(owner.id);
   }
-
-  const email = (body.email || "").trim().toLowerCase();
-  const name = (body.name || "").trim();
-
-  // If no email provided, create/use a default demo owner (seeded on first creation)
-  if (!email) {
-    const existing = await getSessionUser();
-    if (existing) return NextResponse.json({ user: existing });
-
-    const demoEmail = "you@boardly.app";
-    let user = await db.user.findUnique({ where: { email: demoEmail } });
-    if (!user) {
-      user = await db.user.create({
-        data: {
-          email: demoEmail,
-          name: "You",
-          avatarColor: DEFAULT_AVATAR_COLOR,
-        },
-      });
-    }
-    // Ensure the demo owner always has demo boards (idempotent)
-    await seedDemoBoards(user.id);
-    await setSession(user.id);
-    return NextResponse.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatarColor: user.avatarColor,
-      } satisfies SessionUser,
-    });
-  }
-
-  let user = await db.user.findUnique({ where: { email } });
-  if (!user) {
-    user = await db.user.create({
-      data: {
-        email,
-        name: name || email.split("@")[0],
-        avatarColor: body.avatarColor || pickAvatarColor(email),
-      },
-    });
-  }
-  await setSession(user.id);
-  return NextResponse.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      avatarColor: user.avatarColor,
-    } satisfies SessionUser,
-  });
+  await setSession(owner.id);
+  return NextResponse.json({ user: owner satisfies SessionUser });
 }

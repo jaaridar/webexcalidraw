@@ -1,14 +1,14 @@
 // Boardly — save board content (elements + thumbnail)
+// Owner is auto-recognized; guests/collaborators go through access control.
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getSessionUser, getUnlockedBoards } from "@/lib/auth";
+import { getSessionUser, getOwner, getUnlockedBoards } from "@/lib/auth";
 import { evaluateAccess } from "@/lib/boards";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getSessionUser();
   const unlocked = await getUnlockedBoards();
   const { id } = await params;
 
@@ -17,6 +17,15 @@ export async function POST(
     include: { collaborators: true },
   });
   if (!board) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Try session user first; if none, check if this is the owner's board
+  let user = await getSessionUser();
+  if (!user) {
+    const owner = await getOwner();
+    if (board.ownerId === owner.id) {
+      user = owner;
+    }
+  }
 
   const access = evaluateAccess(board, user, unlocked);
   if (!access.canEdit)
