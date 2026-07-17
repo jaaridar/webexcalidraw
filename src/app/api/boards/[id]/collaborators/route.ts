@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getOwner, pickAvatarColor } from "@/lib/auth";
 import { ROLE } from "@/lib/constants";
+import { inviteCollaboratorSchema, formatZodError } from "@/lib/validation";
 
 // GET collaborators (owner only)
 export async function GET(
@@ -53,12 +54,15 @@ export async function POST(
   if (board.ownerId !== owner.id)
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
-  const email = (body.email as string | undefined)?.trim().toLowerCase();
-  const role = (body.role as string) === ROLE.EDITOR ? ROLE.EDITOR : ROLE.VIEWER;
+  const raw = await req.json();
+  const parsed = inviteCollaboratorSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
+  }
+  const { email, role } = parsed.data;
 
-  if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
-  if (email === owner.email.toLowerCase())
+  const emailLower = email.toLowerCase();
+  if (emailLower === owner.email.toLowerCase())
     return NextResponse.json({ error: "You are already the owner" }, { status: 400 });
 
   // find or create user

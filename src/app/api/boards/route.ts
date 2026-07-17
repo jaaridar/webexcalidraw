@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getOwner } from "@/lib/auth";
 import { serializeBoardCard } from "@/lib/boards";
 import { elementsToSvg, svgToDataUrl } from "@/lib/excalidraw-to-svg";
+import { createBoardSchema, formatZodError } from "@/lib/validation";
 import {
   ACCESS_MODE,
   SHARE_MODE,
@@ -28,15 +29,12 @@ export async function GET() {
 // POST create board
 export async function POST(req: Request) {
   const owner = await getOwner();
-  const body = await req.json();
-  const title = (body.title as string | undefined)?.trim() || "Untitled board";
-  const description = (body.description as string | undefined)?.trim() || null;
-  const visibility = (body.visibility as Visibility) || VISIBILITY.PRIVATE;
-  const accessMode = (body.accessMode as AccessMode) || ACCESS_MODE.EDIT;
-  const shareMode = (body.shareMode as ShareMode) || SHARE_MODE.INVITE_ONLY;
-  const category = (body.category as BoardCategory | null) || null;
-  const workspace = (body.workspace as string | null) || null;
-  const elements = (body.elements as string | undefined) || "[]";
+  const raw = await req.json();
+  const parsed = createBoardSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
+  }
+  const { title, description, visibility, accessMode, shareMode, category, workspace, elements } = parsed.data;
 
   const thumbnail = svgToDataUrl(elementsToSvg(elements, { bg: "#fafaf9" }));
 

@@ -9,6 +9,7 @@ import {
   VISIBILITY,
 } from "@/lib/constants";
 import bcrypt from "bcryptjs";
+import { updateBoardSchema, formatZodError } from "@/lib/validation";
 
 // GET single board (owner view — full details incl. collaborators)
 export async function GET(
@@ -49,37 +50,28 @@ export async function PATCH(
   if (board.ownerId !== owner.id)
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
-  const data: Record<string, unknown> = {};
-
-  if (typeof body.title === "string") data.title = body.title.trim();
-  if (typeof body.description === "string")
-    data.description = body.description.trim() || null;
-  if (body.visibility in VISIBILITY) data.visibility = body.visibility;
-  if (body.accessMode in ACCESS_MODE) data.accessMode = body.accessMode;
-  if (body.shareMode in SHARE_MODE) data.shareMode = body.shareMode;
-  if (typeof body.category === "string" || body.category === null)
-    data.category = body.category;
-  if (typeof body.archived === "boolean") data.archived = body.archived;
-  if (typeof body.favorited === "boolean") data.favorited = body.favorited;
-  if (typeof body.allowReshare === "boolean") data.allowReshare = body.allowReshare;
-  if (typeof body.allowExport === "boolean") data.allowExport = body.allowExport;
-  if (typeof body.allowDuplicate === "boolean")
-    data.allowDuplicate = body.allowDuplicate;
-  if (typeof body.workspace === "string" || body.workspace === null)
-    data.workspace = body.workspace;
+  const raw = await req.json();
+  const parsed = updateBoardSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
+  }
+  const data = parsed.data;
 
   // Password handling
-  if (typeof body.passwordEnabled === "boolean") {
-    data.passwordEnabled = body.passwordEnabled;
-    if (body.passwordEnabled === false) {
+  if (data.passwordEnabled !== undefined) {
+    if (data.passwordEnabled === false) {
       data.passwordHash = null;
     }
   }
-  if (typeof body.password === "string" && body.password.trim()) {
-    data.passwordHash = await bcrypt.hash(body.password.trim(), 10);
+  if (typeof data.password === "string" && data.password.trim()) {
+    data.passwordHash = await bcrypt.hash(data.password.trim(), 10);
     data.passwordEnabled = true;
   }
+  if (data.passwordHash === null) {
+    data.passwordEnabled = false;
+  }
+  // Remove raw password before saving
+  delete data.password;
 
   const updated = await db.board.update({
     where: { id },

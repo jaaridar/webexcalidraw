@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Logo, Thumb } from "@/components/common";
-import { useBoards } from "@/hooks/use-data";
+import { useBoards, useDeleteBoard } from "@/hooks/use-data";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -31,6 +31,8 @@ export function Sidebar({ onNewBoard, onOpenBoard }: {
   const [q, setQ] = React.useState("");
   const [showNewWorkspace, setShowNewWorkspace] = React.useState(false);
   const [visibilityFilter, setVisibilityFilter] = React.useState<"all" | "public" | "private">("all");
+  const [deleteBoardId, setDeleteBoardId] = React.useState<string | null>(null);
+  const deleteBoard = useDeleteBoard();
 
   const workspaces = React.useMemo(() => {
     const ws = new Set<string>();
@@ -172,19 +174,25 @@ export function Sidebar({ onNewBoard, onOpenBoard }: {
           </p>
         )}
         {filtered.map((b) => (
-          <button key={b.id} onClick={() => onOpenBoard(b.id)} title={b.title}
-            className={cn("flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors",
-              b.id === currentBoardId ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50")}>
-            <Thumb board={b} active={b.id === currentBoardId} size={24} />
-            <div className="min-w-0 flex-1">
-              <p className={cn("truncate text-[13px] font-medium", b.id === currentBoardId ? "text-sidebar-accent-foreground" : "text-sidebar-foreground")}>{b.title}</p>
-              <p className="text-[10px] text-muted-foreground">
-                {b.visibility === "PUBLIC" ? <><Globe className="size-2.5 inline mr-0.5" /> Public</> : <><Lock className="size-2.5 inline mr-0.5" /> Private</>}
-                {" · "}
-                {b.accessMode === "EDIT" ? <><Pencil className="size-2.5 inline mr-0.5" /> Edit</> : <><Eye className="size-2.5 inline mr-0.5" /> View</>}
-              </p>
-            </div>
-          </button>
+          <div key={b.id} className="group relative flex items-center">
+            <button onClick={() => onOpenBoard(b.id)} title={b.title}
+              className={cn("flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors",
+                b.id === currentBoardId ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50")}>
+              <Thumb board={b} active={b.id === currentBoardId} size={24} />
+              <div className="min-w-0 flex-1">
+                <p className={cn("truncate text-[13px] font-medium", b.id === currentBoardId ? "text-sidebar-accent-foreground" : "text-sidebar-foreground")}>{b.title}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {b.visibility === "PUBLIC" ? <><Globe className="size-2.5 inline mr-0.5" /> Public</> : <><Lock className="size-2.5 inline mr-0.5" /> Private</>}
+                  {" · "}
+                  {b.accessMode === "EDIT" ? <><Pencil className="size-2.5 inline mr-0.5" /> Edit</> : <><Eye className="size-2.5 inline mr-0.5" /> View</>}
+                </p>
+              </div>
+            </button>
+            <Button variant="ghost" size="icon" className="size-7 shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+              onClick={(e) => { e.stopPropagation(); setDeleteBoardId(b.id); }} aria-label="Delete board">
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
         ))}
       </nav>
 
@@ -218,6 +226,27 @@ export function Sidebar({ onNewBoard, onOpenBoard }: {
               toast.success(`Workspace "${name}" created`);
               setShowNewWorkspace(false);
             }}>Create workspace</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete board confirmation dialog */}
+      <Dialog open={!!deleteBoardId} onOpenChange={(open) => !open && setDeleteBoardId(null)}>
+        <DialogContent className="max-w-sm" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete board</DialogTitle>
+            <DialogDescription>This action cannot be undone. Are you sure you want to delete this board?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteBoardId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={async () => {
+              if (!deleteBoardId) return;
+              try {
+                await deleteBoard.mutateAsync(deleteBoardId);
+                toast.success("Board deleted");
+              } catch { toast.error("Could not delete board"); }
+              setDeleteBoardId(null);
+            }}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

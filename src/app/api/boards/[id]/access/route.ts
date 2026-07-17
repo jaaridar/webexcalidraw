@@ -8,6 +8,7 @@ import { getOwner } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { getSessionUser, getUnlockedBoards, unlockBoard } from "@/lib/auth";
 import { evaluateAccess, getCollaboratorRole } from "@/lib/boards";
+import { verifyPasswordSchema, formatZodError } from "@/lib/validation";
 
 // GET access info for a board (does NOT leak elements)
 export async function GET(
@@ -80,8 +81,13 @@ export async function POST(
     return NextResponse.json({ ok: true });
   }
 
-  const body = await req.json();
-  const password = (body.password as string | undefined) || "";
+  const raw = await req.json();
+  const parsed = verifyPasswordSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
+  }
+  const { password } = parsed.data;
+
   const ok = await bcrypt.compare(password, board.passwordHash);
   if (!ok) {
     return NextResponse.json({ ok: false, error: "Incorrect password" }, { status: 401 });
