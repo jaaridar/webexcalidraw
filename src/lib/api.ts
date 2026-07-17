@@ -70,4 +70,8 @@ export const api = {
     }),
   removeCollaborator: (id: string, userId: string) =>
     req<{ ok: boolean }>(`/api/boards/${id}/collaborators/${userId}`, { method: "DELETE" }),
+
+  // workspaces
+  listWorkspaces: () => req<{ workspaces: string[] }>("/api/workspaces"),
+  createWorkspace: (name: string) => req<{ ok: boolean; name: string }>("/api/workspaces", json({ name })),
 };

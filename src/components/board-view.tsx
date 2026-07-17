@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { TopBar } from "@/components/topbar";
 import { BoardSwitcherBar } from "@/components/board-switcher-bar";
 import { DeniedGate, GuestNameGate, PasswordGate } from "@/components/access-gates";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { useAccess, useScene, useUpdateBoard } from "@/hooks/use-data";
 import { useApp } from "@/lib/store";
 import { toast } from "sonner";
@@ -74,23 +75,27 @@ export function BoardView({ boardId, currentUser, onExit }: {
         onToggleFavorite={() => { updateBoard.mutate({ favorited: !board.favorited }); toast.success(board.favorited ? "Removed from favorites" : "Added to favorites"); }}
         onExit={onExit}
       />
-      <BoardSwitcherBar currentBoardId={boardId} />
+      <ErrorBoundary>
+        <BoardSwitcherBar currentBoardId={boardId} />
+      </ErrorBoundary>
       <div className="relative flex-1">
         {sceneQ.isLoading || !sceneQ.data ? (
           <div className="flex h-full w-full items-center justify-center bg-muted/20"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
         ) : sceneQ.isError ? (
           <div className="flex h-full w-full items-center justify-center bg-muted/20 text-sm text-muted-foreground">Could not load the board.</div>
         ) : (
-          <BoardCanvas
-            boardId={boardId}
-            initialElements={sceneQ.data.elements}
-            initialAppState={sceneQ.data.appState}
-            canEdit={sceneQ.data.canEdit}
-            allowExport={sceneQ.data.allowExport}
-            identity={identity}
-            role={access.role}
-            onPresence={setPresence}
-          />
+          <ErrorBoundary>
+            <BoardCanvas
+              boardId={boardId}
+              initialElements={sceneQ.data.elements}
+              initialAppState={sceneQ.data.appState}
+              canEdit={sceneQ.data.canEdit}
+              allowExport={sceneQ.data.allowExport}
+              identity={identity}
+              role={access.role}
+              onPresence={setPresence}
+            />
+          </ErrorBoundary>
         )}
       </div>
     </div>

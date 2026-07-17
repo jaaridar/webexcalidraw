@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useBoards, useSession } from "@/hooks/use-data";
 import { useApp } from "@/lib/store";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 
 export function AppShell() {
   const router = useRouter();
@@ -42,6 +43,25 @@ export function AppShell() {
 
   const openBoard = React.useCallback((id: string) => { router.push(`/?b=${id}`); setCurrentBoard(id); }, [router, setCurrentBoard]);
   const goDashboard = React.useCallback(() => { router.push("/"); }, [router]);
+
+  useKeyboardShortcuts({
+    newBoard: () => setCreateOpen(true),
+    focusSearch: () => {
+      const searchInput = document.querySelector('input[placeholder="Search boards…"]') as HTMLInputElement | null;
+      searchInput?.focus();
+    },
+    closeBoard: () => {
+      if (currentBoardId) {
+        const remaining = boards.filter((b) => b.id !== currentBoardId && !b.archived);
+        if (remaining.length > 0) {
+          openBoard(remaining[0].id);
+        } else {
+          goDashboard();
+        }
+      }
+    },
+    toggleSidebar: () => useApp.getState().toggleSidebar(),
+  });
 
   if (sessionQ.isLoading || !user) return <FullScreen label="Preparing your workspace…" />;
 

@@ -14,6 +14,7 @@ import {
 import { Logo, Thumb } from "@/components/common";
 import { useBoards, useDeleteBoard } from "@/hooks/use-data";
 import { useApp } from "@/lib/store";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { BoardSummary } from "@/lib/types";
@@ -219,12 +220,15 @@ export function Sidebar({ onNewBoard, onOpenBoard }: {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowNewWorkspace(false)}>Cancel</Button>
-            <Button onClick={() => {
+            <Button onClick={async () => {
               const input = document.getElementById("ws-name") as HTMLInputElement | null;
               const name = input?.value?.trim();
               if (!name) { toast.error("Workspace name is required"); return; }
-              toast.success(`Workspace "${name}" created`);
-              setShowNewWorkspace(false);
+              try {
+                await api.createWorkspace(name);
+                toast.success(`Workspace "${name}" created`);
+                setShowNewWorkspace(false);
+              } catch { toast.error("Could not create workspace"); }
             }}>Create workspace</Button>
           </DialogFooter>
         </DialogContent>
