@@ -11,8 +11,8 @@ async function ensureSession() {
       body: "{}",
       credentials: "include",
     })
-      .then(() => (provisioning = null))
-      .catch(() => (provisioning = null));
+      .then(() => { provisioning = null; })
+      .catch(() => { provisioning = null; });
   }
   return provisioning;
 }

@@ -42,10 +42,16 @@ export async function GET(
       allowExport: board.allowExport,
       allowDuplicate: board.allowDuplicate,
       category: board.category,
+      workspace: board.workspace,
+      archived: board.archived,
+      favorited: board.favorited,
+      thumbnail: board.thumbnail,
+      ownerId: board.ownerId,
       owner: board.owner
         ? { id: board.owner.id, name: board.owner.name, avatarColor: board.owner.avatarColor }
         : null,
       collaboratorCount: board.collaborators.length,
+      createdAt: board.createdAt,
       updatedAt: board.updatedAt,
     },
     access,

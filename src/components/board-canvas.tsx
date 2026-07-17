@@ -4,8 +4,12 @@
 // Theme follows the app theme (no separate Excalidraw theme toggle).
 import * as React from "react";
 import { Excalidraw } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types/types";
 import "@excalidraw/excalidraw/index.css";
+
+type ExcalidrawImperativeAPI = {
+  updateScene: (opts: { elements: any[] }) => void;
+  getSceneElements: () => any[];
+};
 import { useTheme } from "next-themes";
 import { elementsToSvg, svgToDataUrl } from "@/lib/excalidraw-to-svg";
 import { api } from "@/lib/api";
@@ -35,7 +39,7 @@ export function BoardCanvas({
   onPresence: (users: PresenceUser[]) => void;
   onSaved?: () => void;
 }) {
-  const [apiRef, setApiRef] = React.useState<ExcalidrawImperativeAPI | null>(null);
+  const [apiRef, setApiRef] = React.useState<any>(null);
   const { resolvedTheme } = useTheme();
   const applyingRemote = React.useRef(false);
   const lastSig = React.useRef("");
@@ -125,8 +129,7 @@ export function BoardCanvas({
         viewModeEnabled={!canEdit}
         zenModeEnabled={false}
         gridModeEnabled={false}
-        lang="en"
-        theme={resolvedTheme === "dark" ? "dark" : "light"}
+         theme={resolvedTheme === "dark" ? "dark" : "light"}
         UIOptions={{
           canvasActions: {
             export: { saveFileToDisk: allowExport },

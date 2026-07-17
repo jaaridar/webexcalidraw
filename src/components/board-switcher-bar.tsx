@@ -39,7 +39,8 @@ export function BoardSwitcherBar({ currentBoardId }: {
 
   const recentBoards = React.useMemo(() => {
     const map = new Map(allBoards.map((b) => [b.id, b]));
-    return recentIds
+    const uniqueIds = [...new Set(recentIds)];
+    return uniqueIds
       .map((id) => map.get(id))
       .filter((b): b is BoardSummary => !!b)
       .slice(0, RECENT_LIMIT);

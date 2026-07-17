@@ -46,6 +46,7 @@ export async function POST(
       allowReshare: false,
       allowExport: board.allowExport,
       allowDuplicate: true,
+      workspace: board.workspace,
       category: board.category,
       thumbnail: board.thumbnail,
       elements: board.elements,

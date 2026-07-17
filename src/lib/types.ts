@@ -57,23 +57,8 @@ export type Access = {
 };
 
 export type AccessInfo = {
-  board: Pick<
-    BoardSummary,
-    | "id"
-    | "title"
-    | "description"
-    | "visibility"
-    | "accessMode"
-    | "shareMode"
-    | "passwordEnabled"
-    | "allowReshare"
-    | "allowExport"
-    | "allowDuplicate"
-    | "category"
-  > & {
+  board: BoardSummary & {
     owner: Pick<User, "id" | "name" | "avatarColor"> | null;
-    collaboratorCount: number;
-    updatedAt: string;
   };
   access: Access;
   currentUser: User | null;

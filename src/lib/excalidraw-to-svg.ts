@@ -7,6 +7,7 @@ type ExElement = {
   y: number;
   width: number;
   height: number;
+  isDeleted?: boolean;
   strokeColor?: string;
   backgroundColor?: string;
   strokeWidth?: number;
@@ -15,8 +16,6 @@ type ExElement = {
   text?: string;
   fontSize?: number;
   points?: [number, number][];
-  width?: number;
-  height?: number;
   boundElements?: { id: string; type: string }[];
 };
 
