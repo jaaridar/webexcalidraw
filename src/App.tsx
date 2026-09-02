@@ -38,7 +38,7 @@ function CanvasList({ user, onSelect, onSignOut }: { user: User; onSelect: (id: 
 }
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null); const [canvasId, setCanvasId] = useState<string | null>(null); const [data, setData] = useState<CanvasData | null>(null); const [error, setError] = useState(''); const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [user, setUser] = useState<User | null>(null); const [authReady, setAuthReady] = useState(false); const [canvasId, setCanvasId] = useState<string | null>(null); const [data, setData] = useState<CanvasData | null>(null); const [error, setError] = useState(''); const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     let active = true
     const clearAuthFragment = () => {
@@ -47,23 +47,16 @@ export default function App() {
       }
     }
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return
-      if (data.session?.user) setUser({ id: data.session.user.id, email: data.session.user.email })
-      clearAuthFragment()
-    })
+    setUser({ id: 'guest', email: 'Guest workspace' })
+    setAuthReady(true)
+    clearAuthFragment()
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return
-      setUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
-      clearAuthFragment()
-    })
-
-    return () => { active = false; listener.subscription.unsubscribe() }
+    return () => { active = false }
   }, [])
   const open = useCallback(async (id: string) => { setCanvasId(id); setError(''); const { data: session } = await supabase.auth.getSession(); const res = await fetch(`/api/load?id=${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${session.session?.access_token ?? ''}` } }); if (!res.ok) { setError('Unable to load this canvas.'); setData(emptyCanvas); return } setData(await res.json()) }, [])
   const save = useCallback((next: CanvasData) => { if (!canvasId) return; if (saveTimer.current) clearTimeout(saveTimer.current); saveTimer.current = setTimeout(async () => { const { data: session } = await supabase.auth.getSession(); const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session?.access_token ?? ''}` }, body: JSON.stringify({ id: canvasId, data: next }) }); if (!res.ok) setError('Changes could not be saved.'); }, 700) }, [canvasId])
-  if (!user) return <AuthScreen onUser={setUser} />
+  if (!authReady) return <main style={styles.auth}><section style={styles.panel}><p style={styles.eyebrow}>WEB EXCALIDRAW</p><h1>Opening your workspace…</h1><p style={styles.muted}>Starting a secure guest session.</p></section></main>
+  if (!user) return <main style={styles.auth}><section style={styles.panel}><p role="alert" style={styles.error}>{error || 'Unable to open your workspace.'}</p></section></main>
   if (!canvasId || !data) return <CanvasList user={user} onSelect={open} onSignOut={() => supabase.auth.signOut()} />
   return <div style={{ height: '100vh', width: '100vw' }}>{error && <div role="alert" style={styles.toast}>{error}</div>}<button style={styles.back} onClick={() => { setCanvasId(null); setData(null); setError('') }}>← Canvases</button><Excalidraw initialData={data as never} onChange={next => save(next as CanvasData)} theme="light" /></div>
 }
