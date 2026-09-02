@@ -39,7 +39,28 @@ function CanvasList({ user, onSelect, onSignOut }: { user: User; onSelect: (id: 
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null); const [canvasId, setCanvasId] = useState<string | null>(null); const [data, setData] = useState<CanvasData | null>(null); const [error, setError] = useState(''); const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => { supabase.auth.getUser().then(({ data }) => { if (data.user) setUser({ id: data.user.id, email: data.user.email }) }); const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ? { id: session.user.id, email: session.user.email } : null)); return () => listener.subscription.unsubscribe() }, [])
+  useEffect(() => {
+    let active = true
+    const clearAuthFragment = () => {
+      if (window.location.hash.includes('access_token=')) {
+        window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`)
+      }
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return
+      if (data.session?.user) setUser({ id: data.session.user.id, email: data.session.user.email })
+      clearAuthFragment()
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return
+      setUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
+      clearAuthFragment()
+    })
+
+    return () => { active = false; listener.subscription.unsubscribe() }
+  }, [])
   const open = useCallback(async (id: string) => { setCanvasId(id); setError(''); const { data: session } = await supabase.auth.getSession(); const res = await fetch(`/api/load?id=${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${session.session?.access_token ?? ''}` } }); if (!res.ok) { setError('Unable to load this canvas.'); setData(emptyCanvas); return } setData(await res.json()) }, [])
   const save = useCallback((next: CanvasData) => { if (!canvasId) return; if (saveTimer.current) clearTimeout(saveTimer.current); saveTimer.current = setTimeout(async () => { const { data: session } = await supabase.auth.getSession(); const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session?.access_token ?? ''}` }, body: JSON.stringify({ id: canvasId, data: next }) }); if (!res.ok) setError('Changes could not be saved.'); }, 700) }, [canvasId])
   if (!user) return <AuthScreen onUser={setUser} />
